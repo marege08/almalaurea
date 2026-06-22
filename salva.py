@@ -58,11 +58,35 @@ def apri_db(path):
     return conn
 
 
+# Le righe di UNA scheda condividono questi campi: sono l'identita' della scheda.
+CHIAVI_SCHEDA = [
+    "anno",
+    "indagine",
+    "tipo_corso",
+    "ateneo",
+    "gruppo",
+    "classe",
+    "corso",
+]
+
+
 def salva_righe(conn, righe):
-    """Inserisce/aggiorna le righe di UNA scheda. Idempotente.
-    Ritorna quante righe sono state passate (per controllo a valle)."""
+    """Inserisce le righe di UNA scheda, sostituendola per intero.
+    Prima cancella le righe gia' presenti per quella scheda, poi reinserisce:
+    cosi' ri-eseguire rimuove anche le righe che non devono piu' esistere
+    (es. spazzatura di una versione buggata del parser), non solo aggiorna.
+    Ritorna quante righe sono state scritte."""
     if not righe:
         return 0
+
+    # Tutte le righe condividono l'identita' della scheda: la prendo dalla prima.
+    ident = righe[0]
+    where = " AND ".join(f"{c} = ?" for c in CHIAVI_SCHEDA)
+    conn.execute(
+        f"DELETE FROM dati WHERE {where}",
+        tuple(ident[c] for c in CHIAVI_SCHEDA),
+    )
+
     segnaposto = ",".join("?" * len(COLONNE))
     sql = f"INSERT OR REPLACE INTO dati ({','.join(COLONNE)}) VALUES ({segnaposto})"
     dati = [tuple(r.get(c) for c in COLONNE) for r in righe]

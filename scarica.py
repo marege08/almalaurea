@@ -39,6 +39,13 @@ def scarica_scheda(params):
     return risposta.text
 
 
+def e_intestazione_colonna(testo):
+    """Vero se la cella e' l'intestazione di colonna 'Collettivo selezionato',
+    con o senza un richiamo a nota tipo '(1)' attaccato. Usato come marcatore
+    di struttura: niente che la contenga e' un dato."""
+    return testo.startswith("Collettivoselezionato")
+
+
 def estrai_righe(tabella):
     """Da una tabella dati2..dati11 a righe-dato, scorrendo le celle in modo
     lineare senza assumere un passo fisso (il preambolo puo' essere dispari).
@@ -53,7 +60,7 @@ def estrai_righe(tabella):
         testo = celle[i]
 
         # cella di pura struttura: vuota, titolo sezione, header colonna
-        if testo == "" or testo == sezione or testo == "Collettivoselezionato":
+        if testo == "" or testo == sezione or e_intestazione_colonna(testo):
             i += 1
             continue
 
@@ -62,7 +69,7 @@ def estrai_righe(tabella):
         # Se il "valore" e' l'intestazione di colonna, allora 'testo' e' un titolo
         # di tabella (non un indicatore): lo salto. Difende dal caso in cui il
         # titolo nella cella non combacia col 'summary' per via di apici diversi.
-        if valore == "Collettivoselezionato":
+        if e_intestazione_colonna(valore):
             i += 1
             continue
 
@@ -96,7 +103,7 @@ def estrai_numerosita(dati1):
     i = 0
     while i < len(celle):
         testo = celle[i]
-        if testo == "" or testo == titolo or testo == "Collettivoselezionato":
+        if testo == "" or testo == titolo or e_intestazione_colonna(testo):
             i += 1
             continue
         valore = celle[i + 1] if i + 1 < len(celle) else ""
