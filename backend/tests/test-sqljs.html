@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <title>Test caricamento almalaurea.sqlite</title>
+  <!-- sql.js via CDN: nessun bundler richiesto per questo test.
+       Versione fissata a 1.14.0: è una libreria esterna, la aggiorniamo
+       a mano quando serve, non a runtime. -->
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/sql-wasm.js"></script>
+</head>
+<body>
+  <h1>Test sql.js</h1>
+  <p>Se vedi due righe (ateneo / gruppo) con un totale di 93 schede, il caricamento funziona.</p>
+  <pre id="output">Caricamento in corso...</pre>
+
+  <script>
+    async function avvia() {
+      const output = document.getElementById("output");
+      try {
+        // 1. Inizializza il motore sql.js (scarica il file .wasm, ~1.5MB, una volta).
+        const SQL = await initSqlJs({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/${file}`,
+        });
+
+        // 2. Scarica il file .sqlite come asset statico — stesso costo zero
+        //    di un'immagine o di un foglio di stile. Metti almalaurea.sqlite
+        //    nella stessa cartella di questo file per il test.
+        const risposta = await fetch("almalaurea.sqlite");
+        if (!risposta.ok) {
+          throw new Error(`HTTP ${risposta.status} — il file è nella stessa cartella?`);
+        }
+        const buffer = await risposta.arrayBuffer();
+
+        // 3. Apri il database SQLite interamente in memoria.
+        const db = new SQL.Database(new Uint8Array(buffer));
+
+        // 4. Query di prova: conta le schede per livello (ateneo vs gruppo).
+        //    Atteso: "ateneo" -> 78 schede, "gruppo" -> 15 schede,
+        //    totale 93 — la stessa cifra confermata in fase0-resoconto.md.
+        const risultato = db.exec(`
+          SELECT
+            CASE WHEN ateneo != '' THEN 'ateneo' ELSE 'gruppo' END AS livello,
+            COUNT(DISTINCT ateneo || '|' || gruppo) AS schede,
+            COUNT(*) AS righe
+          FROM dati
+          GROUP BY livello;
+        `);
+
+        output.textContent = JSON.stringify(risultato, null, 2);
+      } catch (errore) {
+        output.textContent = "Errore: " + errore.message;
+        console.error(errore);
+      }
+    }
+
+    avvia();
+  </script>
+</body>
+</html>

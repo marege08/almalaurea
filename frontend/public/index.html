@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Confronta i dati AlmaLaurea</title>
+<link rel="stylesheet" href="style.css" />
+<!-- sql.js via CDN: nessun bundler richiesto. Versione fissata a 1.14.0,
+     libreria esterna aggiornata a mano quando serve, non a runtime. -->
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/sql-wasm.js"></script>
+</head>
+<body>
+
+<header class="intestazione">
+  <h1>Confronta i dati dei laureati</h1>
+  <p class="sottotitolo">
+    Dati ufficiali <strong>AlmaLaurea</strong>, indagine Profilo dei laureati 2025.
+    Nessun numero è ricalcolato: tutto proviene direttamente dalle schede statistiche pubbliche.
+  </p>
+</header>
+
+<main>
+
+  <section id="stato-caricamento" class="banda-stato">
+    Caricamento dati in corso…
+  </section>
+
+  <section id="area-app" class="nascosto">
+
+    <section class="pannello selettore-schede">
+      <h2>Cosa vuoi confrontare?</h2>
+      <p class="nota-pannello">
+        Aggiungi due o più atenei o gruppi disciplinari da confrontare.
+      </p>
+      <div id="colonne-schede" class="colonne-schede"></div>
+      <button id="btn-aggiungi-colonna" type="button" class="pulsante-secondario">
+        + Aggiungi colonna
+      </button>
+    </section>
+
+    <section class="pannello filtri">
+      <h2>Quali domande vuoi vedere?</h2>
+      <p class="nota-pannello">
+        Tutte sono selezionate di default. Deseleziona quelle che non ti interessano
+        per concentrarti su un confronto specifico.
+      </p>
+      <div id="accordion-filtri" class="accordion"></div>
+    </section>
+
+    <section class="pannello tabella-confronto">
+      <h2>Confronto</h2>
+      <div class="scroll-tabella">
+        <table id="tabella-dati">
+          <thead id="tabella-head"></thead>
+          <tbody id="tabella-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </section>
+
+  <section id="area-errore" class="banda-errore nascosto"></section>
+
+</main>
+
+<footer class="piede">
+  <p>
+    Fonte dei dati: <a href="https://www2.almalaurea.it/" target="_blank" rel="noopener">AlmaLaurea</a>
+    — riproduzione a fini non commerciali con citazione della fonte.
+    Nessun dato è generato o stimato: ogni valore proviene dalle schede statistiche ufficiali.
+  </p>
+  <p class="nota-piccola">
+    Corrispondenza codice→nome di atenei e gruppi disciplinari presa dai menu
+    a tendina ufficiali del sito AlmaLaurea, non da memoria (vedi <code>fase1-resoconto.md</code>).
+  </p>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

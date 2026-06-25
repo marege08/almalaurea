@@ -1,0 +1,286 @@
+/* style.css
+ *
+ * Stile minimo e funzionale. L'estetica definitiva è volutamente
+ * rimandata (fase1-resoconto.md, §7 punto 4): qui l'obiettivo è
+ * leggibilità e chiarezza, non un'identità visiva definitiva.
+ */
+
+:root {
+  --bg: #f7f6f3;
+  --bg-pannello: #ffffff;
+  --testo: #1f2933;
+  --testo-tenue: #5b6470;
+  --accento: #2a5d63;
+  --accento-chiaro: #e4eeee;
+  --bordo: #d8d4cb;
+  --avviso-bg: #fbe9e7;
+  --avviso-testo: #8a3a2a;
+
+  --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--testo);
+  font-family: var(--sans);
+  line-height: 1.5;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem 3rem;
+}
+
+/* --- Intestazione --- */
+
+.intestazione {
+  padding: 2.5rem 1.5rem 1.5rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.intestazione h1 {
+  font-family: var(--serif);
+  font-size: 2rem;
+  margin: 0 0 0.5rem;
+}
+
+.sottotitolo {
+  color: var(--testo-tenue);
+  max-width: 640px;
+  margin: 0;
+}
+
+/* --- Stato di caricamento / errore --- */
+
+.banda-stato {
+  background: var(--accento-chiaro);
+  color: var(--accento);
+  padding: 0.9rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  max-width: 1100px;
+  margin: 0 auto 1.5rem;
+}
+
+.banda-errore {
+  background: var(--avviso-bg);
+  color: var(--avviso-testo);
+  padding: 0.9rem 1.5rem;
+  border-radius: 6px;
+  margin: 0 auto 1.5rem;
+  max-width: 1100px;
+}
+
+.nascosto { display: none !important; }
+
+/* --- Pannelli --- */
+
+.pannello {
+  background: var(--bg-pannello);
+  border: 1px solid var(--bordo);
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.pannello h2 {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  margin: 0 0 0.4rem;
+}
+
+.nota-pannello {
+  color: var(--testo-tenue);
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+/* --- Selettore schede --- */
+
+.colonne-schede {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.colonna-scheda {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+}
+
+.colonna-scheda select {
+  font: inherit;
+  padding: 0.3rem 0.4rem;
+  border-radius: 5px;
+  border: 1px solid var(--bordo);
+  background: white;
+}
+
+.colonna-scheda .rimuovi-colonna {
+  background: none;
+  border: none;
+  color: var(--testo-tenue);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+.colonna-scheda .rimuovi-colonna:hover { color: var(--avviso-testo); }
+
+.pulsante-secondario {
+  font: inherit;
+  background: var(--accento-chiaro);
+  color: var(--accento);
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.pulsante-secondario:hover { background: #d5e6e6; }
+
+/* --- Accordion filtri --- */
+
+.accordion details {
+  border-bottom: 1px solid var(--bordo);
+}
+
+.accordion details:first-of-type { border-top: 1px solid var(--bordo); }
+
+.accordion summary {
+  cursor: pointer;
+  padding: 0.75rem 0.2rem;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.accordion summary .conteggio {
+  color: var(--testo-tenue);
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
+.lista-checkbox {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.4rem 1rem;
+  padding: 0.2rem 0.2rem 1rem;
+}
+
+.voce-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+}
+
+.voce-checkbox input { margin-top: 0.2rem; }
+
+/* --- Tabella di confronto --- */
+
+.scroll-tabella {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92rem;
+}
+
+th, td {
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--bordo);
+  text-align: left;
+  white-space: nowrap;
+}
+
+thead th {
+  background: var(--accento-chiaro);
+  color: var(--accento);
+  position: sticky;
+  top: 0;
+}
+
+thead th.colonna-domanda {
+  text-align: left;
+  white-space: normal;
+  min-width: 220px;
+}
+
+td.colonna-domanda, th.colonna-domanda {
+  white-space: normal;
+}
+
+tr.riga-macro-categoria td {
+  background: var(--bg);
+  font-family: var(--serif);
+  font-weight: 700;
+  color: var(--accento);
+  border-bottom: 2px solid var(--accento);
+}
+
+tr.riga-domanda-intestazione td.colonna-domanda {
+  font-weight: 600;
+}
+
+tr.riga-indicatore td.colonna-domanda {
+  padding-left: 1.6rem;
+  color: var(--testo-tenue);
+  font-size: 0.88rem;
+}
+
+td.cella-valore { font-variant-numeric: tabular-nums; }
+
+td.cella-nota {
+  color: var(--testo-tenue);
+  font-style: italic;
+}
+
+/* --- Piede pagina --- */
+
+.piede {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 3rem;
+  color: var(--testo-tenue);
+  font-size: 0.85rem;
+}
+
+.piede a { color: var(--accento); }
+
+.nota-piccola { font-size: 0.8rem; }
+
+/* --- Focus visibile (accessibilità) --- */
+
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accento);
+  outline-offset: 2px;
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 640px) {
+  .intestazione h1 { font-size: 1.5rem; }
+  .pannello { padding: 1rem; }
+}

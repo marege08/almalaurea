@@ -1,4 +1,2 @@
-info
-test
-venv
-__pycache__
+venv/
+docs/
