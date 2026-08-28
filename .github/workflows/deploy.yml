@@ -1,0 +1,45 @@
+# Deploy del sito statico su GitHub Pages.
+#
+# Il sito vive in frontend/public/ (non nella root del repo), quindi non
+# si puo' usare GitHub Pages "classico" che serve solo root o /docs.
+# Questo workflow carica frontend/public/ come artifact di Pages e lo
+# pubblica. Gira ad ogni push su main (e a mano da Actions -> Run workflow).
+name: Deploy sito su GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permessi minimi necessari al deploy su Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un deploy alla volta; se ne parte uno nuovo, annulla quello in coda.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout del repo
+        uses: actions/checkout@v4
+
+      - name: Configura Pages
+        uses: actions/configure-pages@v5
+
+      - name: Carica frontend/public come artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/public
+
+      - name: Pubblica su Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
