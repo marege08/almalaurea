@@ -46,7 +46,7 @@ function processData({ valore, nota }) {
   // i corsi o la serie storica. Non è ancora tradotto per l'utente.
   // Meglio un avviso visibile in console che un buco silenzioso in tabella:
   // l'integrità del dato vale anche per i casi che NON dovrebbero capitare.
-  console.warn("processData: nota non gestita ->", nota, riga);
+  console.warn("processData: nota non gestita ->", nota);
   return "Dato non disponibile";
 }
 
