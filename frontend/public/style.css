@@ -384,6 +384,61 @@ summary:focus-visible {
 .ai-stato-attesa { color: var(--testo-tenue); }
 .ai-stato-errore { color: var(--avviso-testo); }
 
+/* Istruzioni per sbloccare un modello locale (CORS). Chiuse di default: le
+   apre l'utente, o le apre da sola app.js quando l'errore e' quello. */
+.ai-aiuto { margin: 0 0 1rem; }
+.ai-aiuto summary {
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  color: var(--accento);
+}
+.ai-aiuto-corpo {
+  margin-top: 0.75rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--bordo);
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  color: var(--testo-tenue);
+}
+.ai-aiuto-corpo p { margin: 0 0 0.6rem; }
+.ai-aiuto-titolo {
+  font-weight: 600;
+  color: var(--testo);
+  margin-top: 1rem !important;
+}
+.ai-aiuto-origine {
+  font-size: 0.95rem;
+}
+.ai-aiuto-corpo code {
+  font-size: 0.85em;
+  background: var(--bg);
+  border: 1px solid var(--bordo);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  color: var(--testo);
+  overflow-wrap: anywhere;
+}
+.ai-aiuto-corpo pre {
+  margin: 0 0 0.6rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg);
+  border: 1px solid var(--bordo);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+/* Dentro un blocco di codice la cornice la mette gia' il <pre>. */
+.ai-aiuto-corpo pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  white-space: pre;
+}
+.ai-aiuto-nota {
+  margin-top: 1rem !important;
+  font-size: 0.78rem;
+}
+
 @media (max-width: 640px) {
   .ai-richiesta { flex-direction: column; }
   .pulsante-primario { padding: 0.6rem; }

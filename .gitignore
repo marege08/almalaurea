@@ -1,2 +1,10 @@
 venv/
 docs/
+
+# Cache dei bytecode Python: rigenerata a ogni esecuzione, non va versionata.
+__pycache__/
+
+# Copie di sicurezza del database create da tools/esegui_harvest.py.
+# Sono grosse (~12 MB ciascuna) e locali: servono a tornare indietro dopo un
+# harvest andato male, non a stare nel repository.
+backend/backup-db/

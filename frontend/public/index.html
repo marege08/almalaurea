@@ -82,6 +82,52 @@
         </p>
       </details>
 
+      <details class="ai-aiuto" id="ai-aiuto">
+        <summary>L'AI locale non risponde? Apri qui</summary>
+        <div class="ai-aiuto-corpo">
+          <p>
+            Un modello che gira sul tuo computer (Ollama, LM Studio) accetta di
+            default solo le richieste che partono dal computer stesso, e rifiuta
+            quelle che arrivano da un sito web. È una protezione del programma,
+            non un guasto di questa pagina: devi autorizzare, una volta sola,
+            l'indirizzo di questa pagina, cioè
+          </p>
+          <p class="ai-aiuto-origine"><code class="ai-origine">questa pagina</code></p>
+
+          <p class="ai-aiuto-titolo">Ollama — Linux (servizio systemd)</p>
+          <pre><code>sudo systemctl edit ollama</code></pre>
+          <p>Incolla queste due righe nello spazio modificabile e salva:</p>
+<pre><code>[Service]
+Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code></pre>
+          <p>Poi ricarica il servizio:</p>
+          <pre><code>sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart ollama</code></pre>
+
+          <p class="ai-aiuto-titolo">Ollama — macOS</p>
+          <pre><code>launchctl setenv OLLAMA_ORIGINS "<span class="ai-origine">questa pagina</span>"</code></pre>
+          <p>Poi chiudi e riapri Ollama.</p>
+
+          <p class="ai-aiuto-titolo">Ollama — Windows</p>
+          <p>
+            Crea una variabile d'ambiente utente chiamata
+            <code>OLLAMA_ORIGINS</code> con quel valore, poi chiudi e riapri Ollama.
+          </p>
+
+          <p class="ai-aiuto-titolo">LM Studio</p>
+          <p>
+            Nella scheda del server locale attiva l'opzione CORS, poi riavvia il
+            server.
+          </p>
+
+          <p class="ai-aiuto-nota">
+            Che questa pagina sia su <code>https</code> e il tuo modello su
+            <code>http://localhost</code> non è un problema: i browser trattano
+            localhost come indirizzo sicuro. L'unico ostacolo è l'autorizzazione
+            qui sopra. Anche dopo averla data, la richiesta non lascia il tuo
+            computer: va dal tuo browser al tuo modello, e basta.
+          </p>
+        </div>
+      </details>
+
       <div class="ai-richiesta">
         <textarea id="ai-frase" rows="2"
           placeholder="Es. Confronta le prospettive di lavoro tra ingegneria informatica ed economia"></textarea>

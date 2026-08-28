@@ -452,6 +452,48 @@ const elAiBaseUrl = document.getElementById('ai-baseurl');
 const elAiModel = document.getElementById('ai-model');
 const elAiKey = document.getElementById('ai-key');
 const elAiDimentica = document.getElementById('ai-dimentica');
+const elAiAiuto = document.getElementById('ai-aiuto');
+
+// Un indirizzo che punta alla macchina dell'utente: e' il caso in cui un
+// errore di rete significa quasi sempre "permesso mancante", non "server giu'".
+const RE_INDIRIZZO_LOCALE = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
+
+// Quando fetch fallisce per CORS il browser NON dice che e' stato il CORS: per
+// non rivelare informazioni sul server restituisce lo stesso TypeError generico
+// che darebbe una rete staccata. Distinguere i due casi dal messaggio e'
+// impossibile, ma il contesto basta: se l'indirizzo e' locale, la causa quasi
+// certa e' il permesso mancante. Meglio dirlo che lasciare "Failed to fetch".
+function eErroreDiRete(errore) {
+  return (
+    errore instanceof TypeError ||
+    /failed to fetch|networkerror|load failed/i.test(errore?.message ?? '')
+  );
+}
+
+function diagnosticaConnessione(errore, baseUrl) {
+  if (!eErroreDiRete(errore)) return null;
+  if (RE_INDIRIZZO_LOCALE.test(baseUrl)) {
+    return {
+      messaggio:
+        'Non riesco a raggiungere il modello sul tuo computer. Di solito manca il permesso: ' +
+        'il programma che lo esegue deve autorizzare questa pagina. Ho aperto le istruzioni qui sopra.',
+      apriAiuto: true,
+    };
+  }
+  if (location.protocol === 'https:' && baseUrl.startsWith('http://')) {
+    return {
+      messaggio:
+        'Il browser blocca le chiamate in http da una pagina https, tranne verso localhost. ' +
+        'Usa un indirizzo https, oppure un modello locale.',
+      apriAiuto: false,
+    };
+  }
+  return {
+    messaggio:
+      "Non riesco a raggiungere l'indirizzo configurato. Controlla l'URL di base e la connessione.",
+    apriAiuto: false,
+  };
+}
 
 function leggiConfigAi() {
   return {
@@ -533,7 +575,13 @@ async function inviaFraseAi() {
     if (scartati > 0) msg += ` (${scartati} scelte non valide sono state ignorate.)`;
     mostraStatoAi(msg, 'ok');
   } catch (errore) {
-    mostraStatoAi(`Errore nel contattare l'AI: ${errore.message}`, 'errore');
+    const diagnosi = diagnosticaConnessione(errore, config.baseUrl);
+    if (diagnosi) {
+      if (diagnosi.apriAiuto && elAiAiuto) elAiAiuto.open = true;
+      mostraStatoAi(diagnosi.messaggio, 'errore');
+    } else {
+      mostraStatoAi(`Errore nel contattare l'AI: ${errore.message}`, 'errore');
+    }
     console.error(errore);
   } finally {
     elAiInvia.disabled = false;
@@ -543,6 +591,14 @@ async function inviaFraseAi() {
 // Aggancio degli eventi solo se il markup AI e' presente (degrado elegante:
 // senza il pannello, la UI di Fase 1 funziona identica).
 if (elAiInvia) {
+  // Le istruzioni CORS devono riportare l'indirizzo ESATTO di questa pagina:
+  // e' diverso in locale (http://localhost:8000) e online (https://...github.io),
+  // e un'origine sbagliata nella configurazione non autorizza nulla. Quindi si
+  // scrive a runtime, non a mano nell'HTML.
+  for (const el of document.querySelectorAll('.ai-origine')) {
+    el.textContent = location.origin;
+  }
+
   elAiPreset.addEventListener('change', () => {
     const preset = PRESET_AI[elAiPreset.value];
     if (!preset) return;

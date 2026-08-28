@@ -1,14 +1,54 @@
 # -*- coding: utf-8 -*-
 """Esegue l'harvest degli aggregati: per ogni selezione scarica la scheda,
-la monta in righe tidy e la salva su SQLite. Resiliente e ri-eseguibile."""
+la monta in righe tidy e la salva su SQLite. Resiliente e ri-eseguibile.
 
+Si lancia da QUALUNQUE cartella:  python3 tools/esegui_harvest.py
+Tutti i percorsi sono calcolati dalla radice del repository, mai dalla
+cartella corrente."""
+
+import shutil
+import sys
 import time
+from datetime import datetime
+from pathlib import Path
 
-from salva import apri_db, salva_righe
-from scarica import raccogli_scheda, scarica_scheda
+RADICE = Path(__file__).resolve().parent.parent
+
+# I moduli del progetto vivono in due cartelle diverse (tools/ e backend/src/)
+# e si importano fra loro per nome. Senza queste due righe l'harvest muore
+# all'import con ModuleNotFoundError, da qualunque cartella lo lanci.
+for _cartella in (RADICE / "tools", RADICE / "backend" / "src"):
+    if str(_cartella) not in sys.path:
+        sys.path.insert(0, str(_cartella))
+
+from salva import apri_db, salva_righe  # noqa: E402  (dopo il fix di sys.path)
+from scarica import raccogli_scheda, scarica_scheda  # noqa: E402
 
 PAUSA_SECONDI = 1.0
-DB_PATH = "almalaurea.sqlite"
+
+# IL database del sito, non una copia: e' il file che il frontend carica e che
+# il deploy pubblica. Quando questo percorso era relativo alla cartella
+# corrente, un harvest scriveva un file che nessuno leggeva e il sito
+# continuava a servire i dati vecchi, senza un solo messaggio d'errore.
+DB_PATH = RADICE / "frontend" / "public" / "almalaurea.sqlite"
+
+# Le copie di sicurezza NON stanno in frontend/public: quella cartella viene
+# pubblicata per intero, ci finirebbero online.
+CARTELLA_BACKUP = RADICE / "backend" / "backup-db"
+
+
+def fai_copia_di_sicurezza(db_path):
+    """Copia il database prima di riscriverlo. Un harvest interrotto a meta'
+    lascia un misto di schede nuove e vecchie: con la copia si torna indietro.
+    Ritorna il percorso della copia, o None se non c'era nulla da copiare."""
+    db_path = Path(db_path)
+    if not db_path.exists():
+        return None
+    CARTELLA_BACKUP.mkdir(parents=True, exist_ok=True)
+    marca = datetime.now().strftime("%Y%m%d-%H%M%S")
+    destinazione = CARTELLA_BACKUP / f"{db_path.stem}-{marca}{db_path.suffix}"
+    shutil.copy2(db_path, destinazione)
+    return destinazione
 
 
 def etichetta_di(combo):
@@ -21,6 +61,11 @@ def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
     prodotto da genera_combinazioni(): {'livello', 'codice', 'params'}, dove
     'params' sono i parametri piatti da passare a visualizza.php.
     Ritorna la lista dei falliti (combo, errore), cosi' puoi ri-eseguire solo quelli."""
+    copia = fai_copia_di_sicurezza(db_path)
+    if copia:
+        print(f"Copia di sicurezza del database: {copia.relative_to(RADICE)}")
+    print(f"Scrivo su: {Path(db_path).relative_to(RADICE)}\n")
+
     conn = apri_db(db_path)
     falliti = []
     combinazioni = list(combinazioni)
@@ -68,9 +113,16 @@ def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
 
 
 if __name__ == "__main__":
-    # Le 93 selezioni aggregate vengono dalla tua harvest.py.
+    # Le 93 selezioni aggregate vengono da backend/src/harvest.py.
     from harvest import genera_combinazioni
 
     combinazioni = list(genera_combinazioni())
     print(f"Combinazioni da scaricare: {len(combinazioni)}\n")
     esegui(combinazioni)
+    print(
+        "\nDati aggiornati. Ora rigenera i file derivati, altrimenti la UI resta\n"
+        "disallineata dal database:\n"
+        "    python3 tools/genera_config_filtri.py\n"
+        "    python3 tools/genera_nomi.py\n"
+        "Poi controlla con ./tools/serve.sh e fai commit+push (il push pubblica)."
+    )

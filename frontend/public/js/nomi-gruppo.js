@@ -9,6 +9,9 @@
  * E' la classificazione adottata dal MUR a partire dal 2020 — diversa
  * dalla classificazione "storica" a 15 gruppi usata in anni precedenti
  * da AlmaLaurea: i nomi vanno presi da qui, non da memoria.
+ *
+ * Rigenerato da tools/genera_nomi.py a partire da
+ * backend/dati-sorgente/ateneo-numero.txt, non modificato a mano.
  */
 
 export const NOMI_GRUPPO = {

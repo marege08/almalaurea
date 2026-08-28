@@ -2,14 +2,14 @@
  * nomi-ateneo.js
  *
  * Corrispondenza codice ateneo -> nome, presa dal menu a tendina reale
- * del sito AlmaLaurea (docs/ateneo-numero.txt), non da memoria: 78 codici,
- * verificati 1:1 contro i codici realmente presenti in almalaurea.sqlite
- * (0 mancanti, 0 estranei). La voce "tutti" della tendina e' scartata:
- * serve all'interfaccia del sito, non e' un ateneo reale.
+ * del sito AlmaLaurea (backend/dati-sorgente/ateneo-numero.txt), non da
+ * memoria: 78 codici, verificati 1:1 contro i codici realmente presenti in
+ * almalaurea.sqlite (0 mancanti, 0 estranei). La voce "tutti" della tendina
+ * e' scartata: serve all'interfaccia del sito, non e' un ateneo reale.
  *
  * I codici restano la fonte univoca nel dataset; questa mappa serve solo
- * alla UI per mostrare il nome al posto del codice. Se il set di atenei
- * cambia, si rigenera da ateneo-numero.txt, non si modifica a mano.
+ * alla UI per mostrare il nome al posto del codice. Rigenerato da
+ * tools/genera_nomi.py, non modificato a mano.
  */
 
 export const NOMI_ATENEO = {
