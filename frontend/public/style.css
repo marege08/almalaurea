@@ -284,3 +284,107 @@ summary:focus-visible {
   .intestazione h1 { font-size: 1.5rem; }
   .pannello { padding: 1rem; }
 }
+
+/* --- Strato AI (Fase 2) --- */
+
+.ai-pannello { border-left: 3px solid var(--accento); }
+
+.ai-badge {
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accento);
+  background: var(--accento-chiaro);
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.ai-connessione { margin: 0.5rem 0 1rem; }
+.ai-connessione summary {
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  color: var(--accento);
+}
+
+.ai-config {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  align-items: end;
+}
+.ai-config label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: var(--testo-tenue);
+}
+.ai-config select,
+.ai-config input {
+  font-family: var(--sans);
+  font-size: 0.9rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--bordo);
+  border-radius: 6px;
+  background: var(--bg-pannello);
+  color: var(--testo);
+}
+
+.ai-avviso {
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  color: var(--testo-tenue);
+  margin-top: 0.75rem;
+}
+
+.ai-richiesta {
+  display: flex;
+  gap: 0.6rem;
+  align-items: stretch;
+}
+#ai-frase {
+  flex: 1;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  background: var(--bg-pannello);
+  color: var(--testo);
+  resize: vertical;
+}
+
+.pulsante-primario {
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0 1.2rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accento);
+  color: #fff;
+  cursor: pointer;
+}
+.pulsante-primario:hover { filter: brightness(1.08); }
+.pulsante-primario:disabled { opacity: 0.55; cursor: default; }
+
+.ai-stato {
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+  min-height: 1.2em;
+}
+.ai-stato-ok { color: var(--accento); }
+.ai-stato-attesa { color: var(--testo-tenue); }
+.ai-stato-errore { color: var(--avviso-testo); }
+
+@media (max-width: 640px) {
+  .ai-richiesta { flex-direction: column; }
+  .pulsante-primario { padding: 0.6rem; }
+}

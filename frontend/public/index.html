@@ -38,6 +38,58 @@
       </button>
     </section>
 
+    <section class="pannello ai-pannello">
+      <h2>Chiedi con l'AI <span class="ai-badge">opzionale</span></h2>
+      <p class="nota-pannello">
+        Descrivi a parole cosa vuoi confrontare: un'AI a tua scelta — anche
+        locale sul tuo computer — imposta colonne e domande per te. I numeri
+        restano quelli ufficiali AlmaLaurea: l'AI sceglie solo <em>cosa</em>
+        mostrare, mai <em>quanto</em> vale.
+      </p>
+
+      <details class="ai-connessione">
+        <summary>Collega la tua AI</summary>
+        <div class="ai-config">
+          <label>Preset
+            <select id="ai-preset">
+              <option value="">—</option>
+              <option value="ollama">Ollama (locale)</option>
+              <option value="lmstudio">LM Studio (locale)</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </label>
+          <label>Forma API
+            <select id="ai-forma">
+              <option value="openai">OpenAI-compatibile</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </label>
+          <label>URL di base
+            <input id="ai-baseurl" type="text" placeholder="http://localhost:11434/v1" />
+          </label>
+          <label>Modello
+            <input id="ai-model" type="text" placeholder="es. qwen3.6:27b, gpt-4o-mini, claude-haiku-4-5" />
+          </label>
+          <label>Chiave API (se serve)
+            <input id="ai-key" type="password" placeholder="resta solo nel tuo browser" autocomplete="off" />
+          </label>
+          <button id="ai-dimentica" type="button" class="pulsante-secondario">Dimentica</button>
+        </div>
+        <p class="ai-avviso">
+          La configurazione resta nel tuo browser e viene inviata solo all'indirizzo
+          che scegli. Con un modello locale non esce nulla dal tuo computer.
+        </p>
+      </details>
+
+      <div class="ai-richiesta">
+        <textarea id="ai-frase" rows="2"
+          placeholder="Es. Confronta le prospettive di lavoro tra ingegneria informatica ed economia"></textarea>
+        <button id="ai-invia" type="button" class="pulsante-primario">Chiedi</button>
+      </div>
+      <p id="ai-stato" class="ai-stato"></p>
+    </section>
+
     <section class="pannello filtri">
       <h2>Quali domande vuoi vedere?</h2>
       <p class="nota-pannello">

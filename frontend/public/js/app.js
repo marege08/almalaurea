@@ -11,6 +11,7 @@ import { CONFIG_FILTRI } from './config-filtri.js';
 import { processData } from './processData.js';
 import { NOMI_ATENEO } from './nomi-ateneo.js';
 import { NOMI_GRUPPO } from './nomi-gruppo.js';
+import { chiediConfronto } from './ai/connettore.js';
 
 const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
 
@@ -157,8 +158,21 @@ elBtnAggiungiColonna.addEventListener('click', () => {
 
 // --- 3. Accordion dei filtri (domande), generato da CONFIG_FILTRI ---
 
+// Contatori dei filtri, richiamabili anche dallo strato AI (applicaQuery).
+const conteggiPerMacro = new Map();
+function aggiornaConteggio(macro) {
+  const dati = conteggiPerMacro.get(macro);
+  if (!dati) return;
+  const tot = dati.voci.filter((v) => document.getElementById(`chk-${v.id}`)?.checked).length;
+  dati.spanConteggio.textContent = `${tot} di ${dati.voci.length} selezionate`;
+}
+function aggiornaTuttiIConteggi() {
+  for (const macro of conteggiPerMacro.keys()) aggiornaConteggio(macro);
+}
+
 function renderFiltri() {
   elAccordionFiltri.innerHTML = '';
+  conteggiPerMacro.clear();
 
   for (const macro of ORDINE_MACRO) {
     const voci = CONFIG_FILTRI[macro];
@@ -177,10 +191,7 @@ function renderFiltri() {
     const lista = document.createElement('div');
     lista.className = 'lista-checkbox';
 
-    function aggiornaConteggio() {
-      const totaleSelezionate = voci.filter((v) => document.getElementById(`chk-${v.id}`).checked).length;
-      spanConteggio.textContent = `${totaleSelezionate} di ${voci.length} selezionate`;
-    }
+    conteggiPerMacro.set(macro, { spanConteggio, voci });
 
     for (const voce of voci) {
       const label = document.createElement('label');
@@ -191,7 +202,7 @@ function renderFiltri() {
       input.id = `chk-${voce.id}`;
       input.checked = true;
       input.addEventListener('change', () => {
-        aggiornaConteggio();
+        aggiornaConteggio(macro);
         renderTabella();
       });
 
@@ -204,7 +215,7 @@ function renderFiltri() {
 
     details.appendChild(lista);
     elAccordionFiltri.appendChild(details);
-    aggiornaConteggio();
+    aggiornaConteggio(macro);
   }
 }
 
@@ -416,6 +427,143 @@ async function avvia() {
       errore
     );
   }
+}
+
+
+// --- 7. Strato AI (Fase 2): frase in linguaggio naturale -> query validata ---
+// La UI parla SOLO con chiediConfronto(): riceve una query gia' passata dal
+// validatore (il muro), quindi qui arrivano solo colonne/domande reali.
+
+const CHIAVE_CONFIG_AI = 'almalaurea-ai-config';
+
+const PRESET_AI = {
+  ollama:    { forma: 'openai',    baseUrl: 'http://localhost:11434/v1', model: '' },
+  lmstudio:  { forma: 'openai',    baseUrl: 'http://localhost:1234/v1',  model: '' },
+  openai:    { forma: 'openai',    baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  anthropic: { forma: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-haiku-4-5' },
+};
+
+const elAiFrase = document.getElementById('ai-frase');
+const elAiInvia = document.getElementById('ai-invia');
+const elAiStato = document.getElementById('ai-stato');
+const elAiPreset = document.getElementById('ai-preset');
+const elAiForma = document.getElementById('ai-forma');
+const elAiBaseUrl = document.getElementById('ai-baseurl');
+const elAiModel = document.getElementById('ai-model');
+const elAiKey = document.getElementById('ai-key');
+const elAiDimentica = document.getElementById('ai-dimentica');
+
+function leggiConfigAi() {
+  return {
+    forma: elAiForma.value,
+    baseUrl: elAiBaseUrl.value.trim(),
+    model: elAiModel.value.trim(),
+    apiKey: elAiKey.value.trim() || undefined,
+  };
+}
+
+function salvaConfigAi() {
+  // localStorage puo' non essere disponibile (finestra privata, permessi):
+  // in quel caso la config resta valida solo per questa pagina, senza errori.
+  try {
+    localStorage.setItem(CHIAVE_CONFIG_AI, JSON.stringify(leggiConfigAi()));
+  } catch { /* ignora */ }
+}
+
+function caricaConfigAi() {
+  let cfg = null;
+  try {
+    const grezzo = localStorage.getItem(CHIAVE_CONFIG_AI);
+    if (grezzo) cfg = JSON.parse(grezzo);
+  } catch { cfg = null; }
+  if (!cfg) return;
+  if (cfg.forma) elAiForma.value = cfg.forma;
+  if (cfg.baseUrl) elAiBaseUrl.value = cfg.baseUrl;
+  if (cfg.model) elAiModel.value = cfg.model;
+  if (cfg.apiKey) elAiKey.value = cfg.apiKey;
+}
+
+function mostraStatoAi(testo, tipo) {
+  elAiStato.textContent = testo;
+  elAiStato.className = 'ai-stato' + (tipo ? ` ai-stato-${tipo}` : '');
+}
+
+// Applica una query VALIDATA allo stato della UI di Fase 1, poi ridisegna.
+// Difensivo: se un pezzo e' vuoto (l'AI non ha prodotto nulla di valido li),
+// NON azzera quella parte della vista dell'utente.
+function applicaQuery({ colonne: colonneQuery, domande }) {
+  if (colonneQuery.length > 0) {
+    elColonneSchede.innerHTML = '';
+    colonne = [];
+    for (const c of colonneQuery) creaColonna(c.tipo, c.codice);
+  }
+  if (domande.length > 0) {
+    const insieme = new Set(domande);
+    for (const macro of ORDINE_MACRO) {
+      for (const voce of CONFIG_FILTRI[macro]) {
+        const chk = document.getElementById(`chk-${voce.id}`);
+        if (chk) chk.checked = insieme.has(voce.id);
+      }
+    }
+    aggiornaTuttiIConteggi();
+  }
+  renderTabella();
+}
+
+async function inviaFraseAi() {
+  const frase = elAiFrase.value.trim();
+  if (!frase) { mostraStatoAi('Scrivi cosa vuoi confrontare.', 'errore'); return; }
+  const config = leggiConfigAi();
+  if (!config.baseUrl || !config.model) {
+    mostraStatoAi("Collega prima un'AI: servono URL di base e nome del modello.", 'errore');
+    return;
+  }
+  salvaConfigAi();
+  elAiInvia.disabled = true;
+  mostraStatoAi('Sto interpretando la richiesta…', 'attesa');
+  try {
+    const query = await chiediConfronto(config, frase);
+    if (query.colonne.length === 0 && query.domande.length === 0) {
+      mostraStatoAi('Non sono riuscito a ricavare un confronto valido. Prova a essere piu\' specifico, o usa i filtri a mano.', 'errore');
+      return;
+    }
+    applicaQuery(query);
+    const scartati = query.scartati.colonne.length + query.scartati.domande.length;
+    let msg = query.nota || 'Confronto impostato.';
+    if (scartati > 0) msg += ` (${scartati} scelte non valide sono state ignorate.)`;
+    mostraStatoAi(msg, 'ok');
+  } catch (errore) {
+    mostraStatoAi(`Errore nel contattare l'AI: ${errore.message}`, 'errore');
+    console.error(errore);
+  } finally {
+    elAiInvia.disabled = false;
+  }
+}
+
+// Aggancio degli eventi solo se il markup AI e' presente (degrado elegante:
+// senza il pannello, la UI di Fase 1 funziona identica).
+if (elAiInvia) {
+  elAiPreset.addEventListener('change', () => {
+    const preset = PRESET_AI[elAiPreset.value];
+    if (!preset) return;
+    elAiForma.value = preset.forma;
+    elAiBaseUrl.value = preset.baseUrl;
+    if (preset.model) elAiModel.value = preset.model;
+    salvaConfigAi();
+  });
+  elAiInvia.addEventListener('click', inviaFraseAi);
+  elAiFrase.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) inviaFraseAi();
+  });
+  for (const el of [elAiForma, elAiBaseUrl, elAiModel, elAiKey]) {
+    el.addEventListener('change', salvaConfigAi);
+  }
+  elAiDimentica.addEventListener('click', () => {
+    try { localStorage.removeItem(CHIAVE_CONFIG_AI); } catch { /* ignora */ }
+    elAiKey.value = '';
+    mostraStatoAi('Configurazione AI dimenticata da questo browser.', 'ok');
+  });
+  caricaConfigAi();
 }
 
 avvia();
