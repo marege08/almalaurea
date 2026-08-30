@@ -16,7 +16,11 @@
 //
 // USO:  node backend/tests/test-browser.mjs
 //       node backend/tests/test-browser.mjs --porta 8123 --vedi
+//       node backend/tests/test-browser.mjs --url https://marege08.github.io/almalaurea/
 //         --vedi  lascia il browser visibile (utile per guardare cosa succede)
+//         --url   prova un sito gia' pubblicato invece della copia locale: le
+//                 stesse verifiche valgono in produzione, ed e' il modo di
+//                 sapere che il deploy e' andato davvero, non "dovrebbe".
 
 import { spawn } from 'node:child_process';
 import { setTimeout as attendi } from 'node:timers/promises';
@@ -34,6 +38,9 @@ const valoreDi = (nome, predefinito) => {
 const PORTA_HTTP = Number(valoreDi('--porta', '8765'));
 const PORTA_CDP = PORTA_HTTP + 1;
 const HEADLESS = !argomenti.includes('--vedi');
+// Con --url non si avvia nessun server: si prova il sito indicato.
+const URL_ESTERNO = valoreDi('--url', null);
+const INDIRIZZO = URL_ESTERNO ?? `http://localhost:${PORTA_HTTP}/index.html`;
 
 const CHROME = ['google-chrome', 'google-chrome-stable', 'chromium'];
 
@@ -136,14 +143,17 @@ async function aspettaInPagina(valuta, espressione, descrizione, tentativi = 200
 }
 
 async function main() {
-  const server = spawn('python3', ['-m', 'http.server', String(PORTA_HTTP)], {
-    cwd: PUBBLICA, stdio: 'ignore',
-  });
+  const server = URL_ESTERNO
+    ? null
+    : spawn('python3', ['-m', 'http.server', String(PORTA_HTTP)], {
+        cwd: PUBBLICA, stdio: 'ignore',
+      });
 
   let chrome = null;
   let scheda = null;
   try {
-    await aspettaPorta(`http://127.0.0.1:${PORTA_HTTP}/index.html`).catch(() => {});
+    console.log(`Provo: ${INDIRIZZO}\n`);
+    if (server) await aspettaPorta(`http://127.0.0.1:${PORTA_HTTP}/index.html`).catch(() => {});
 
     for (const binario of CHROME) {
       try {
@@ -161,7 +171,7 @@ async function main() {
     if (!chrome) throw new Error(`Nessun Chrome trovato fra: ${CHROME.join(', ')}`);
 
     await aspettaPorta(`http://127.0.0.1:${PORTA_CDP}/json/version`);
-    scheda = await apriScheda(`http://localhost:${PORTA_HTTP}/index.html`);
+    scheda = await apriScheda(INDIRIZZO);
     const { valuta } = scheda;
 
     // Prima che il documento esista, poi che l'app sia effettivamente accesa.
@@ -294,7 +304,7 @@ async function main() {
   } finally {
     scheda?.chiudi();
     chrome?.kill();
-    server.kill();
+    server?.kill();
   }
 
   console.log(`\n${passati} passati, ${falliti} falliti`);

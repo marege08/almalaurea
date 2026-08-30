@@ -193,6 +193,10 @@ la pubblicazione.**
 ```bash
 node backend/tests/test-validatore.mjs   # il "muro" che scarta l'output AI non valido
 node backend/tests/test-browser.mjs      # l'app vera, dentro Chrome headless
+
+# le stesse verifiche sul sito gia' pubblicato: e' il modo di sapere che il
+# deploy e' andato davvero, invece di dire "dovrebbe essere online"
+node backend/tests/test-browser.mjs --url https://marege08.github.io/almalaurea/
 ```
 
 `test-browser.mjs` avvia da solo un server statico e Chrome headless, aspetta
