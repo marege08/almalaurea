@@ -1,16 +1,22 @@
 # AlmaLaurea — confronto dei dati sui laureati
 
 Web app gratuita per orientarsi nella scelta del corso di laurea in Italia.
-Confronta i dati ufficiali di [AlmaLaurea](https://www.almalaurea.it/) (indagine
-*Profilo dei laureati*) fra **atenei** e **gruppi disciplinari**.
+Confronta i dati ufficiali di [AlmaLaurea](https://www.almalaurea.it/) — le
+indagini *Profilo dei laureati* e *Condizione occupazionale* — fra **atenei** e
+**gruppi disciplinari**.
 
 **Sito pubblico:** <https://marege08.github.io/almalaurea/>
 
 ## Cosa fa
 
 - Metti a confronto due o più atenei / gruppi disciplinari, colonna per colonna.
-- Scegli quali delle 79 domande vedere (regolarità negli studi, voto di laurea,
-  prospettive di lavoro, conoscenze linguistiche, profilo dello studente…).
+- Scegli quali delle 101 domande vedere (regolarità negli studi, voto di laurea,
+  conoscenze linguistiche, profilo dello studente…) più la categoria **Dopo la
+  Laurea**, che è l'indagine sull'occupazione a 1/3/5 anni: tasso di
+  occupazione, retribuzione, tipo di contratto, dove si finisce a lavorare.
+- Per l'occupazione scegli anche **quale definizione di «occupato»** usare —
+  ampia o restrittiva. Sono le due definizioni ufficiali di AlmaLaurea, danno
+  numeri diversi sulla stessa domanda, e il sito dice in chiaro cosa cambia.
 - Facoltativo: descrivi il confronto **a parole** e un'AI a tua scelta imposta
   colonne e domande al posto tuo.
 
@@ -58,12 +64,12 @@ backend/
   dati-sorgente/               le tendine del sito AlmaLaurea da cui nascono i nomi
   src/harvest.py               le 93 selezioni da scaricare (78 atenei + 15 gruppi)
   src/pulizia.py               interpreta una cella: numero, oppure simbolo (* - /)
-  tests/                       test del validatore AI e prova di caricamento di sql.js
+  tests/                       test del validatore AI, prova di sql.js, test nel browser
 frontend/public/               TUTTO ciò che viene pubblicato
   almalaurea.sqlite            il dataset (unica fonte di verità)
   index.html  style.css
   js/app.js                    carica il DB, disegna filtri e tabella
-  js/config-filtri.js          le 79 domande        (GENERATO)
+  js/config-filtri.js          le 101 domande       (GENERATO)
   js/nomi-ateneo.js            codice -> nome       (GENERATO)
   js/nomi-gruppo.js            codice -> nome       (GENERATO)
   js/processData.js            valore/simbolo -> testo di cella
@@ -124,9 +130,10 @@ I dati AlmaLaurea escono circa una volta l'anno. L'aggiornamento è questa
 catena, in quest'ordine:
 
 ```bash
-# 1. scarica le 93 schede e riscrive il database
+# 1. scarica le 93 schede e riscrive il database, UNA INDAGINE PER VOLTA
 #    (fa da sola una copia di sicurezza in backend/backup-db/)
-python3 tools/esegui_harvest.py
+python3 tools/esegui_harvest.py              # profilo (predefinito)
+python3 tools/esegui_harvest.py occupazione  # esiti occupazionali
 
 # 2. rigenera i file derivati dal database: SEMPRE tutti e due
 python3 tools/genera_config_filtri.py
@@ -134,10 +141,14 @@ python3 tools/genera_nomi.py
 
 # 3. guarda il risultato prima di pubblicare
 ./tools/serve.sh
+node backend/tests/test-browser.mjs
 
 # 4. pubblica: il push su main fa partire il deploy da solo
 git add -A && git commit -m "Dati aggiornati" && git push
 ```
+
+Le due indagini convivono nello stesso database, tenute separate dalla colonna
+`indagine`: scaricarne una non tocca le righe dell'altra.
 
 Gli script calcolano i percorsi dalla radice del progetto: si lanciano da
 qualunque cartella e colpiscono sempre il database giusto, quello che il sito
@@ -149,7 +160,7 @@ database. Serve ad accorgersi di un disallineamento senza sovrascrivere niente.
 
 **Da sapere prima di un aggiornamento annuale.** Gli id delle domande in
 `config-filtri.js` sono derivati dalle etichette di AlmaLaurea (minuscolo,
-accenti tolti, troncato a 60 caratteri). Se AlmaLaurea cambia il testo di una
+accenti tolti, troncato a 80 caratteri). Se AlmaLaurea cambia il testo di una
 domanda, **cambia anche il suo id**. Non rompe nulla di per sé — la UI e lo
 strato AI leggono gli id dallo stesso file — ma i tre file generati vanno
 rigenerati *insieme* al database, mai uno sì e uno no.
@@ -157,6 +168,19 @@ rigenerati *insieme* al database, mai uno sì e uno no.
 E un avvertimento pratico: se l'harvest si interrompe a metà, il database resta
 un misto di schede nuove e vecchie. La copia in `backend/backup-db/` è lì per
 tornare indietro.
+
+**La trappola dell'indagine `occupazione`.** La sua scheda contiene *due volte*
+le stesse sezioni, una per ciascuna definizione ufficiale di «occupato», con
+sezione, categoria e indicatore identici. A distinguerle è solo la classe CSS
+del blocco: il secondo è lo stesso indice **+100** (`datiprofilo4` contro
+`datiprofilo104`). Senza la colonna `definizione` una sovrascriverebbe l'altra
+in silenzio, e a Bari «Non hanno mai lavorato dopo la laurea» vale 29,4 con una
+e 35,7 con l'altra. Attenzione al caso limite: **un blocco senza gemello è
+condiviso, non restrittivo** — è quello che succede a `datiprofilo3`
+("2b. Formazione post-laurea"), che il JavaScript di AlmaLaurea non nasconde in
+nessuna delle due modalità. Quelle righe prendono `definizione = 'condivisa'` e
+vanno mostrate sempre, qualunque definizione l'utente scelga. Presumere che
+"non è ≥100" volesse dire "restrittiva" aveva marchiato male 837 righe.
 
 ## Deploy
 
@@ -168,7 +192,16 @@ la pubblicazione.**
 
 ```bash
 node backend/tests/test-validatore.mjs   # il "muro" che scarta l'output AI non valido
+node backend/tests/test-browser.mjs      # l'app vera, dentro Chrome headless
 ```
+
+`test-browser.mjs` avvia da solo un server statico e Chrome headless, aspetta
+che `sql.js` abbia caricato il database e poi interroga il DOM vero: la tabella
+si popola, il selettore di definizione c'è, cambiare definizione cambia sia le
+domande consultabili sia i numeri (a Bari 29,4 con la definizione ampia, 35,7
+con la restrittiva), la console è pulita. **Zero dipendenze:** Chrome è già
+sulla macchina e Node 22 ha `WebSocket` globale, quindi si pilota Chrome via
+DevTools Protocol senza installare niente. `--vedi` lascia il browser visibile.
 
 `backend/tests/test-sqljs.html` è una pagina autonoma che verifica il
 caricamento di `sql.js` sul database reale (servila con `serve.sh`).

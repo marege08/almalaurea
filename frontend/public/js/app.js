@@ -22,6 +22,39 @@ let codiciGruppo = [];
 let colonne = []; // [{ id, tipo: 'ateneo'|'gruppo', codice }]
 let contatoreColonne = 0;
 
+// --- Definizione di "occupato" (riguarda solo l'indagine 'occupazione') ---
+// La scheda AlmaLaurea porta DUE versioni complete degli stessi dati, una per
+// ciascuna definizione ufficiale, e il suo JavaScript ne mostra una sola.
+// Partiamo dalla stessa scelta del sito (ampia, per gli anni dopo il 2020):
+// se a parita' di domanda il sito ufficiale e questo mostrassero numeri
+// diversi, l'errore sembrerebbe nostro anche quando non lo e'.
+const DEFINIZIONE_PREDEFINITA = 'ampia';
+let definizioneScelta = DEFINIZIONE_PREDEFINITA;
+let definizioniDisponibili = [];
+
+// Le parole sono di AlmaLaurea, copiate dai tooltip delle sue schede: sono
+// definizioni ufficiali, non parafrasi nostre.
+const TESTO_DEFINIZIONE = {
+  ampia:
+    'Si considerano occupati tutti coloro che dichiarano di svolgere un\u2019attivit\u00e0, ' +
+    'anche di formazione, purch\u00e9 retribuita.',
+  restrittiva:
+    'Sono considerati occupati i laureati che dichiarano di svolgere un\u2019attivit\u00e0 ' +
+    'lavorativa retribuita, anche con assegno di ricerca, purch\u00e9 non si tratti di ' +
+    'un\u2019attivit\u00e0 di formazione (tirocinio, praticantato, dottorato, specializzazione, ecc.).',
+};
+
+// Una voce e' interrogabile con la definizione scelta se non dipende dalla
+// definizione ('' = indagine profilo, dove il doppione non esiste;
+// 'condivisa' = blocco non doppiato nella pagina, vale per entrambe) oppure se
+// esiste proprio sotto la definizione scelta. Le 4 domande che esistono sotto
+// una sola definizione vengono cosi' nascoste invece di mostrare trattini.
+function voceDisponibile(voce) {
+  return voce.definizioni.some(
+    (d) => d === '' || d === 'condivisa' || d === definizioneScelta
+  );
+}
+
 // Mappa id voce -> { voce, macro } per ritrovare rapidamente la voce di
 // CONFIG_FILTRI a partire dall'id del checkbox selezionato.
 const VOCE_PER_ID = new Map();
@@ -38,6 +71,9 @@ const elAreaErrore = document.getElementById('area-errore');
 const elColonneSchede = document.getElementById('colonne-schede');
 const elBtnAggiungiColonna = document.getElementById('btn-aggiungi-colonna');
 const elAccordionFiltri = document.getElementById('accordion-filtri');
+const elRiquadroDefinizione = document.getElementById('riquadro-definizione');
+const elSelDefinizione = document.getElementById('sel-definizione');
+const elNotaDefinizione = document.getElementById('nota-definizione');
 const elTabellaHead = document.getElementById('tabella-head');
 const elTabellaBody = document.getElementById('tabella-body');
 
@@ -70,6 +106,20 @@ function leggiCodici(database) {
   // Il codice gruppo è testo ('1'..'15'): ordine numerico, non alfabetico
   // (altrimenti '10' finirebbe prima di '2').
   codiciGruppo.sort((a, b) => Number(a) - Number(b));
+
+  // Le definizioni REALI del dataset, non un elenco scritto a mano: se un
+  // aggiornamento dei dati ne togliesse una, il selettore la smette di
+  // offrirla invece di proporre una scelta che non da' righe.
+  const definizioni = database.exec(
+    "SELECT DISTINCT definizione FROM dati " +
+    "WHERE definizione NOT IN ('', 'condivisa', 'sconosciuta') ORDER BY definizione;"
+  );
+  definizioniDisponibili = definizioni.length
+    ? definizioni[0].values.map((riga) => riga[0])
+    : [];
+  if (!definizioniDisponibili.includes(definizioneScelta)) {
+    definizioneScelta = definizioniDisponibili[0] ?? DEFINIZIONE_PREDEFINITA;
+  }
 }
 
 // --- 2. Selettore delle schede da confrontare ---
@@ -160,11 +210,34 @@ elBtnAggiungiColonna.addEventListener('click', () => {
 
 // Contatori dei filtri, richiamabili anche dallo strato AI (applicaQuery).
 const conteggiPerMacro = new Map();
+// voce.id -> l'elemento <label> della sua casella, per poterla nascondere
+// quando la definizione scelta non la prevede.
+const ELEMENTO_VOCE = new Map();
+
 function aggiornaConteggio(macro) {
   const dati = conteggiPerMacro.get(macro);
   if (!dati) return;
-  const tot = dati.voci.filter((v) => document.getElementById(`chk-${v.id}`)?.checked).length;
-  dati.spanConteggio.textContent = `${tot} di ${dati.voci.length} selezionate`;
+  // Il denominatore sono le domande DISPONIBILI con la definizione scelta,
+  // non tutte: "3 di 22" quando 2 sono nascoste sarebbe una bugia.
+  const disponibili = dati.voci.filter(voceDisponibile);
+  const tot = disponibili.filter((v) => document.getElementById(`chk-${v.id}`)?.checked).length;
+  dati.spanConteggio.textContent = `${tot} di ${disponibili.length} selezionate`;
+}
+
+// Le caselle si costruiscono UNA volta per tutte le domande e poi si mostrano
+// o si nascondono: cosi' cambiare definizione non azzera le spunte
+// dell'utente su tutto il resto della pagina.
+function aggiornaVisibilitaVoci() {
+  for (const [id, elemento] of ELEMENTO_VOCE) {
+    const trovata = VOCE_PER_ID.get(id);
+    if (trovata) elemento.hidden = !voceDisponibile(trovata.voce);
+  }
+  for (const dati of conteggiPerMacro.values()) {
+    // Una macro-categoria le cui domande sono tutte fuori definizione non
+    // deve restare aperta e vuota.
+    dati.details.hidden = !dati.voci.some(voceDisponibile);
+  }
+  aggiornaTuttiIConteggi();
 }
 function aggiornaTuttiIConteggi() {
   for (const macro of conteggiPerMacro.keys()) aggiornaConteggio(macro);
@@ -173,6 +246,7 @@ function aggiornaTuttiIConteggi() {
 function renderFiltri() {
   elAccordionFiltri.innerHTML = '';
   conteggiPerMacro.clear();
+  ELEMENTO_VOCE.clear();
 
   for (const macro of ORDINE_MACRO) {
     const voci = CONFIG_FILTRI[macro];
@@ -191,7 +265,7 @@ function renderFiltri() {
     const lista = document.createElement('div');
     lista.className = 'lista-checkbox';
 
-    conteggiPerMacro.set(macro, { spanConteggio, voci });
+    conteggiPerMacro.set(macro, { spanConteggio, voci, details });
 
     for (const voce of voci) {
       const label = document.createElement('label');
@@ -211,6 +285,7 @@ function renderFiltri() {
 
       label.append(input, testo);
       lista.appendChild(label);
+      ELEMENTO_VOCE.set(voce.id, label);
     }
 
     details.appendChild(lista);
@@ -219,13 +294,53 @@ function renderFiltri() {
   }
 }
 
+// --- 3b. Selettore della definizione di "occupato" ---
+
+// La macro-categoria che ospita l'indagine 'occupazione' non e' scritta a
+// mano: viene dai dati, cosi' se un domani cambia nome nel generatore questo
+// testo non mente.
+const MACRO_OCCUPAZIONE = ORDINE_MACRO.find((m) =>
+  CONFIG_FILTRI[m].some((v) => v.indagine === 'occupazione')
+);
+
+function aggiornaNotaDefinizione() {
+  if (!elNotaDefinizione || !MACRO_OCCUPAZIONE) return;
+  const voci = CONFIG_FILTRI[MACRO_OCCUPAZIONE];
+  const disponibili = voci.filter(voceDisponibile).length;
+  const spiegazione = TESTO_DEFINIZIONE[definizioneScelta] ?? '';
+  elNotaDefinizione.textContent =
+    `${spiegazione} Con questa scelta sono consultabili ${disponibili} delle ` +
+    `${voci.length} domande di «${MACRO_OCCUPAZIONE}»; le altre categorie non cambiano.`;
+}
+
+function renderSelettoreDefinizione() {
+  // Con meno di due definizioni il selettore non ha senso e resta nascosto:
+  // e' il caso di un dataset che contenga solo l'indagine 'profilo'.
+  if (!elRiquadroDefinizione || definizioniDisponibili.length < 2) return;
+
+  elSelDefinizione.innerHTML = definizioniDisponibili
+    .map((d) => `<option value="${d}">${d}</option>`)
+    .join('');
+  elSelDefinizione.value = definizioneScelta;
+  elRiquadroDefinizione.classList.remove('nascosto');
+
+  elSelDefinizione.addEventListener('change', () => {
+    definizioneScelta = elSelDefinizione.value;
+    aggiornaNotaDefinizione();
+    aggiornaVisibilitaVoci();
+    renderTabella();
+  });
+
+  aggiornaNotaDefinizione();
+}
+
 function vociSelezionate() {
   // Restituisce le voci selezionate, raggruppate per macro-categoria,
   // nello stesso ordine di CONFIG_FILTRI (mai un ordine "a caso").
   const risultato = [];
   for (const macro of ORDINE_MACRO) {
     const voci = CONFIG_FILTRI[macro].filter(
-      (v) => document.getElementById(`chk-${v.id}`)?.checked
+      (v) => voceDisponibile(v) && document.getElementById(`chk-${v.id}`)?.checked
     );
     if (voci.length > 0) risultato.push({ macro, voci });
   }
@@ -236,55 +351,86 @@ function vociSelezionate() {
 
 const SEPARATORE_CHIAVE = '\u0001';
 
-function chiave(categoria, indicatore) {
-  return `${categoria}${SEPARATORE_CHIAVE}${indicatore}`;
+// L'indagine fa parte della chiave: 'profilo' e 'occupazione' hanno coppie
+// (categoria, indicatore) che si somigliano, e tenerle separate qui costa una
+// stringa in piu' e toglie un'intera categoria di errori muti.
+function chiave(indagine, categoria, indicatore) {
+  return `${indagine}${SEPARATORE_CHIAVE}${categoria}${SEPARATORE_CHIAVE}${indicatore}`;
 }
 
 function interrogaScheda(colonna) {
   const colonnaFiltro = colonna.tipo === 'ateneo' ? 'ateneo' : 'gruppo';
   const altraColonna = colonna.tipo === 'ateneo' ? 'gruppo' : 'ateneo';
 
+  // Il filtro sulla definizione NON e' un dettaglio di presentazione. Senza,
+  // le due versioni di 'occupazione' tornano entrambe con la stessa coppia
+  // (categoria, indicatore) — 69 collisioni — e l'ultima letta sovrascrive la
+  // prima in silenzio, su tassi di occupazione che differiscono di sei punti.
+  // '' e 'condivisa' passano sempre: sono le righe che non dipendono dalla
+  // definizione (rispettivamente il profilo, e i blocchi non doppiati nella
+  // pagina AlmaLaurea).
   const stmt = db.prepare(
-    `SELECT categoria, indicatore, valore, nota, valore_raw, numero_laureati, numero_compilatori
+    `SELECT indagine, categoria, indicatore, valore, nota, valore_raw,
+            numero_laureati, numero_compilatori
      FROM dati
-     WHERE ${colonnaFiltro} = :codice AND ${altraColonna} = ''`
+     WHERE ${colonnaFiltro} = :codice AND ${altraColonna} = ''
+       AND definizione IN ('', 'condivisa', :definizione)`
   );
-  stmt.bind({ ':codice': colonna.codice });
+  stmt.bind({ ':codice': colonna.codice, ':definizione': definizioneScelta });
 
   const mappa = new Map();
-  let numeroLaureati = null;
-  let numeroCompilatori = null;
+  // La numerosita' e' PER INDAGINE: a Bari il profilo conta 7.401 laureati e
+  // 6.999 compilatori, l'occupazione 7.042 laureati e 4.445 intervistati.
+  // Prima si prendevano i due numeri dalla PRIMA riga restituita da una query
+  // senza ORDER BY: tornava quella giusta solo per l'ordine di inserimento
+  // nella tabella, cioe' per fortuna.
+  const numerosita = new Map();
 
   while (stmt.step()) {
     const riga = stmt.getAsObject();
-    mappa.set(chiave(riga.categoria, riga.indicatore), {
+    mappa.set(chiave(riga.indagine, riga.categoria, riga.indicatore), {
       valore: riga.valore,
       nota: riga.nota,
       valore_raw: riga.valore_raw,
     });
-    if (numeroLaureati === null) {
-      numeroLaureati = riga.numero_laureati;
-      numeroCompilatori = riga.numero_compilatori;
+    if (!numerosita.has(riga.indagine)) {
+      numerosita.set(riga.indagine, {
+        laureati: riga.numero_laureati,
+        compilatori: riga.numero_compilatori,
+      });
     }
   }
   stmt.free();
 
-  return { mappa, numeroLaureati, numeroCompilatori };
+  return { mappa, numerosita };
 }
 
 // --- 5. Rendering della tabella di confronto ---
 
-function formattaIntestazioneColonna(colonna, numeroLaureati) {
-  const etichettaPrincipale = etichettaCodice(colonna.tipo, colonna.codice);
+// Una riga di numerosita' per ogni indagine effettivamente mostrata in
+// tabella. Un solo numero non basta piu': le due indagini intervistano
+// collettivi diversi, e attribuire al profilo la numerosita' di occupazione
+// (o viceversa) e' un dato sbagliato scritto sotto il nome dell'ateneo.
+function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate) {
   const contenitore = document.createElement('div');
   const riga1 = document.createElement('div');
-  riga1.textContent = etichettaPrincipale;
-  const riga2 = document.createElement('small');
-  riga2.style.color = 'var(--testo-tenue)';
-  riga2.style.fontWeight = '400';
-  riga2.textContent =
-    numeroLaureati != null ? `${numeroLaureati.toLocaleString('it-IT')} laureati` : '';
-  contenitore.append(riga1, riga2);
+  riga1.textContent = etichettaCodice(colonna.tipo, colonna.codice);
+  contenitore.appendChild(riga1);
+
+  const it = (n) => (n != null ? n.toLocaleString('it-IT') : '—');
+  for (const indagine of indaginiMostrate) {
+    const n = numerosita.get(indagine);
+    if (!n || n.laureati == null) continue;
+    const riga = document.createElement('small');
+    riga.style.color = 'var(--testo-tenue)';
+    riga.style.fontWeight = '400';
+    riga.style.display = 'block';
+    riga.textContent =
+      indagine === 'occupazione'
+        ? `${it(n.laureati)} laureati · ${it(n.compilatori)} intervistati`
+        : `${it(n.laureati)} laureati`;
+    contenitore.appendChild(riga);
+  }
   return contenitore;
 }
 
@@ -330,21 +476,31 @@ function renderTabella() {
     ...interrogaScheda(colonna),
   }));
 
+  // Le domande scelte si calcolano PRIMA dell'intestazione: e' da queste che
+  // si sa quali indagini stanno per comparire, e quindi quali numerosita'
+  // vanno scritte sotto il nome di ogni colonna.
+  const gruppi = vociSelezionate();
+  const indaginiMostrate = [];
+  for (const { voci } of gruppi) {
+    for (const voce of voci) {
+      if (!indaginiMostrate.includes(voce.indagine)) indaginiMostrate.push(voce.indagine);
+    }
+  }
+
   // --- Intestazione ---
   const trHead = document.createElement('tr');
   const thDomanda = document.createElement('th');
   thDomanda.className = 'colonna-domanda';
   thDomanda.textContent = 'Domanda';
   trHead.appendChild(thDomanda);
-  for (const { colonna, numeroLaureati } of datiPerColonna) {
+  for (const { colonna, numerosita } of datiPerColonna) {
     const th = document.createElement('th');
-    th.appendChild(formattaIntestazioneColonna(colonna, numeroLaureati));
+    th.appendChild(formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate));
     trHead.appendChild(th);
   }
   elTabellaHead.appendChild(trHead);
 
   // --- Corpo, raggruppato per macro-categoria ---
-  const gruppi = vociSelezionate();
 
   if (gruppi.length === 0) {
     const tr = document.createElement('tr');
@@ -370,7 +526,7 @@ function renderTabella() {
         const tr = document.createElement('tr');
         tr.className = 'riga-domanda-intestazione';
         tr.appendChild(creaCellaTesto(voce.label, 'colonna-domanda'));
-        const k = chiave(voce.categoria, voce.indicatori[0]);
+        const k = chiave(voce.indagine, voce.categoria, voce.indicatori[0]);
         for (const { mappa } of datiPerColonna) {
           tr.appendChild(creaCellaValore(mappa.get(k)));
         }
@@ -390,7 +546,7 @@ function renderTabella() {
           const tr = document.createElement('tr');
           tr.className = 'riga-indicatore';
           tr.appendChild(creaCellaTesto(indicatore, 'colonna-domanda'));
-          const k = chiave(voce.categoria, indicatore);
+          const k = chiave(voce.indagine, voce.categoria, indicatore);
           for (const { mappa } of datiPerColonna) {
             tr.appendChild(creaCellaValore(mappa.get(k)));
           }
@@ -417,6 +573,8 @@ async function avvia() {
     creaColonna('ateneo', codiciAteneo[1] ?? codiciAteneo[0]);
 
     renderFiltri();
+    renderSelettoreDefinizione();
+    aggiornaVisibilitaVoci();
     renderTabella();
 
     elStatoCaricamento.classList.add('nascosto');

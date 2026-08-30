@@ -52,8 +52,11 @@ def fai_copia_di_sicurezza(db_path):
 
 
 def etichetta_di(combo):
-    """Etichetta leggibile per i log, dall'involucro prodotto da harvest.py."""
-    return f"{combo['livello']}={combo['codice']}"
+    """Etichetta leggibile per i log, dall'involucro prodotto da harvest.py.
+    Include l'indagine: le due convivono nello stesso database, e un log che
+    non dice quale stai scaricando e' un log che non serve a niente."""
+    indagine = combo["params"].get("CONFIG", "?")
+    return f"{indagine}/{combo['livello']}={combo['codice']}"
 
 
 def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
@@ -114,9 +117,19 @@ def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
 
 if __name__ == "__main__":
     # Le 93 selezioni aggregate vengono da backend/src/harvest.py.
-    from harvest import genera_combinazioni
+    from harvest import INDAGINI, genera_combinazioni
 
-    combinazioni = list(genera_combinazioni())
+    # Quale indagine scaricare. Le due convivono nello stesso database: la
+    # colonna `indagine` le tiene separate, quindi scaricarne una non tocca
+    # le righe dell'altra.
+    #   python3 tools/esegui_harvest.py              -> profilo (default)
+    #   python3 tools/esegui_harvest.py occupazione  -> esiti occupazionali
+    indagine = sys.argv[1] if len(sys.argv) > 1 else "profilo"
+    if indagine not in INDAGINI:
+        sys.exit(f"Indagine sconosciuta: {indagine!r}. Attese: {', '.join(INDAGINI)}")
+
+    combinazioni = list(genera_combinazioni(config=indagine))
+    print(f"Indagine: {indagine}")
     print(f"Combinazioni da scaricare: {len(combinazioni)}\n")
     esegui(combinazioni)
     print(

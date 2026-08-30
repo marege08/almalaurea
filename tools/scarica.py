@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Scarica una scheda da visualizza.php e la monta in righe tidy complete."""
 
+import re
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -13,6 +15,13 @@ HEADERS = {"User-Agent": "progetto-orientamento-laurea"}
 
 # Una scheda ateneo che conosci: Bari (70002), profilo, anno singolo.
 # Livello "ateneo": ateneo acceso, tutto il resto su 'tutti'.
+#
+# I quattro parametri pa / cs_univ / cs_facoa / cs_corsb sembrano superflui,
+# perche' l'indagine 'profilo' risponde anche senza. NON lo sono: con
+# CONFIG=occupazione la stessa richiesta senza di loro torna HTTP 400. Questo
+# set e' copiato dalla query string che manda il sito stesso, trovata in un
+# commento HTML dentro docs/solotendine.php: e' il contratto vero, non
+# ricostruito a memoria.
 PARAMS = {
     "anno": "2025",
     "corstipo": "tutti",
@@ -28,9 +37,26 @@ PARAMS = {
     "isstella": "0",
     "presiui": "tutti",
     "disaggregazione": "",
+    "pa": "tutti",
+    "cs_univ": "tutti",
+    "cs_facoa": "tutti",
+    "cs_corsb": "tutti",
     "LANG": "it",
     "CONFIG": "profilo",
 }
+
+# Le tabelle-dato hanno id 'datiN' e class 'datiprofiloM'.
+#
+# Nelle schede 'occupazione' le stesse sezioni compaiono DUE volte, una per
+# ciascuna definizione ufficiale di "occupato", con sezione/categoria/
+# indicatore identici. L'unico segno che le distingue e' quel numero di
+# classe: il secondo blocco e' lo stesso indice +100. Confermato dal
+# JavaScript della pagina (swapBlocchi), che nasconde .datiprofilo4..11 e
+# mostra .datiprofilo104..114 quando la definizione attiva e' quella ampia.
+# Sono due numeri ufficiali diversi, non un dettaglio di visualizzazione.
+RE_ID_TABELLA = re.compile(r"^dati(\d+)$")
+RE_CLASSE_BLOCCO = re.compile(r"^datiprofilo(\d+)$")
+SOGLIA_BLOCCO_AMPIA = 100
 
 
 def scarica_scheda(params):
@@ -44,6 +70,74 @@ def e_intestazione_colonna(testo):
     con o senza un richiamo a nota tipo '(1)' attaccato. Usato come marcatore
     di struttura: niente che la contenga e' un dato."""
     return testo.startswith("Collettivoselezionato")
+
+
+def tabelle_dato(zuppa):
+    """Tutte le tabelle-dato della scheda, in ordine, ESCLUSA dati1 (che e' la
+    numerosita', non dati). Scoperte dal documento invece che assunte: 'profilo'
+    ne ha 11, 'occupazione' 16. Il vecchio range(2, 12) cablato perdeva le
+    tabelle oltre l'undicesima senza dire niente — su una scheda occupazione
+    faceva sparire 67 righe su 177."""
+    trovate = []
+    for tabella in zuppa.find_all("table", id=True):
+        m = RE_ID_TABELLA.match(tabella["id"])
+        if m and int(m.group(1)) >= 2:
+            trovate.append((int(m.group(1)), tabella))
+    trovate.sort(key=lambda coppia: coppia[0])
+    return [tabella for _, tabella in trovate]
+
+
+def indice_blocco(tabella):
+    """Il numero N della classe 'datiprofiloN' di questa tabella, o None.
+    E' la classe a distinguere i blocchi, non l'id: gli id (dati2, dati3, ...)
+    sono un contatore progressivo che non dice niente su chi e' chi."""
+    for classe in tabella.get("class", []):
+        m = RE_CLASSE_BLOCCO.match(classe)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def indici_blocco(zuppa):
+    """Tutti gli indici 'datiprofiloN' presenti nella scheda. Serve a sapere
+    se un blocco ha il suo gemello: e' quello che distingue un blocco specifico
+    di una definizione da un blocco condiviso."""
+    return {
+        i
+        for tabella in zuppa.find_all("table", id=True)
+        if (i := indice_blocco(tabella)) is not None
+    }
+
+
+def definizione_di(tabella, indagine, indici_presenti):
+    """Quale definizione di "occupato" descrive questa tabella.
+
+    '' per l'indagine 'profilo', dove il doppione non esiste.
+    'sconosciuta' se la classe attesa non c'e': un valore che NON collide con
+    gli altri, cosi' una sorpresa di struttura resta visibile nel dato invece
+    di sovrascrivere silenziosamente una riga buona.
+
+    NON basta guardare il numero. La pagina porta le due versioni una dopo
+    l'altra, la seconda con lo stesso indice +100, e il suo swapBlocchi()
+    nasconde .datiprofilo4..11 mostrando .datiprofilo104..114. Ma il ciclo che
+    NASCONDE parte da 4 mentre quello che MOSTRA parte da 3: .datiprofilo3
+    resta visibile in entrambe le modalita', ed e' figlio unico (103 non
+    esiste). Quindi "non e' >= 100" significa soltanto "non e' la copia
+    ampia" — per un blocco appaiato equivale a "restrittiva", per un blocco
+    spaiato no. Prima si dava per scontato che equivalesse sempre, e le 837
+    righe di "2b. Formazione post-laurea" finivano marchiate 'restrittiva' pur
+    valendo per entrambe: filtrando su 'ampia' sarebbero sparite dalla vista
+    pur avendo dati buoni. Ora il gemello si guarda invece di presumerlo."""
+    if indagine != "occupazione":
+        return ""
+    indice = indice_blocco(tabella)
+    if indice is None:
+        return "sconosciuta"
+    if indice >= SOGLIA_BLOCCO_AMPIA:
+        return "ampia"
+    if indice + SOGLIA_BLOCCO_AMPIA in indici_presenti:
+        return "restrittiva"
+    return "condivisa"
 
 
 def estrai_righe(tabella):
@@ -125,7 +219,12 @@ def estrai_numerosita(dati1):
         return int(v) if intero else v
 
     g_laureati = trova("numero di laureati")
-    g_compilatori = trova("compilato")
+    # 'profilo' dice "hanno compilato il questionario", 'occupazione' dice
+    # "Numero di intervistati". E' la stessa grandezza — la base del
+    # questionario — chiamata in due modi: si cercano entrambe le diciture.
+    g_compilatori = trova("compilato") or trova("intervistat")
+    # In 'occupazione' ci sono due tassi di risposta (sul totale dei laureati e
+    # sui contattabili): trova() prende il primo, cioe' quello sul totale.
     g_tasso = trova("tasso")
 
     risultato = {
@@ -158,9 +257,10 @@ def raccogli_scheda(html, params):
     def norm(v):  # 'tutti' / assente = casella spenta -> stringa vuota
         return "" if v in ("tutti", None) else v
 
+    indagine = params.get("CONFIG", "")  # profilo / occupazione
     identificativi = {
         "anno": params.get("anno", ""),  # 'tutti' = serie storica: lo lascio com'e'
-        "indagine": params.get("CONFIG", ""),  # profilo / occupazione
+        "indagine": indagine,
         "tipo_corso": norm(params.get("corstipo")),
         "ateneo": norm(params.get("ateneo")),
         "gruppo": norm(params.get("gruppo")),
@@ -168,16 +268,30 @@ def raccogli_scheda(html, params):
         "corso": norm(params.get("postcorso")),
     }
 
+    # L'avviso di estrai_numerosita non va ingoiato: prima veniva calcolato e
+    # buttato, quindi un'etichetta cambiata si traduceva in colonne NULL senza
+    # che nessuno se ne accorgesse. Meglio rumoroso che silenzioso.
+    if num.get("_attenzione"):
+        etichetta = " ".join(
+            f"{k}={v}" for k, v in identificativi.items() if v
+        )
+        print(f"    ATTENZIONE numerosita' [{etichetta}]: {num['_attenzione']}")
+
     righe = []
-    for n in range(2, 12):  # dati2 ... dati11
-        tab = zuppa.find("table", id=f"dati{n}")
-        if tab is None:
-            continue
+    indici_presenti = indici_blocco(zuppa)
+    for tab in tabelle_dato(zuppa):
+        definizione = definizione_di(tab, indagine, indici_presenti)
+        if definizione == "sconosciuta":
+            print(
+                f"    ATTENZIONE: tabella {tab.get('id')} senza classe "
+                f"'datiprofiloN' riconoscibile: definizione non determinata."
+            )
         for r in estrai_righe(tab):
             valore, nota = pulisci_valore(r["valore"])
             righe.append(
                 {
                     **identificativi,
+                    "definizione": definizione,
                     "sezione": r["sezione"],
                     "categoria": r["categoria"]
                     or "",  # None (nessuna categoria) -> '' per SQL

@@ -1,7 +1,7 @@
 // vocabolario.js
 //
 // Il "vocabolario" e' l'elenco chiuso di cose reali che l'AI puo' nominare:
-// gli atenei, i gruppi disciplinari e le 79 domande di CONFIG_FILTRI.
+// gli atenei, i gruppi disciplinari e tutte le domande di CONFIG_FILTRI.
 // Serve a due scopi:
 //   1) costruire il testo da mettere nel system prompt (cosi' l'AI sa che
 //      "informatica" -> codice gruppo giusto);

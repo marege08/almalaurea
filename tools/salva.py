@@ -10,6 +10,7 @@ import sqlite3
 COLONNE = [
     "anno",
     "indagine",
+    "definizione",
     "tipo_corso",
     "ateneo",
     "gruppo",
@@ -29,6 +30,17 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS dati (
     anno               TEXT    NOT NULL,
     indagine           TEXT    NOT NULL,   -- profilo / occupazione
+    -- Solo per l'indagine 'occupazione': la scheda contiene DUE volte le stesse
+    -- sezioni, una per definizione ufficiale di "occupato" (restrittiva e
+    -- ampia/ISTAT-Forze di Lavoro). Senza questa colonna avrebbero la stessa
+    -- chiave primaria e una sovrascriverebbe l'altra in silenzio.
+    -- '' su 'profilo', dove il problema non esiste.
+    -- 'condivisa' quando il blocco NON e' doppiato nella pagina (e' il caso di
+    -- "2b. Formazione post-laurea"): quel dato vale per entrambe le
+    -- definizioni, ed e' diverso da '' — li' la domanda non si pone proprio,
+    -- qui si pone e la risposta e' "tutt'e due". Chi interroga deve includerlo
+    -- SEMPRE, qualunque definizione l'utente abbia scelto.
+    definizione        TEXT    NOT NULL,   -- '' | restrittiva | ampia | condivisa | sconosciuta
     tipo_corso         TEXT    NOT NULL,   -- '' = casella spenta (livello ateneo/gruppo)
     ateneo             TEXT    NOT NULL,   -- '' su una scheda-gruppo
     gruppo             TEXT    NOT NULL,   -- '' su una scheda-ateneo
@@ -43,7 +55,7 @@ CREATE TABLE IF NOT EXISTS dati (
     numero_laureati    INTEGER,
     numero_compilatori INTEGER,
     PRIMARY KEY (
-        anno, indagine, tipo_corso, ateneo, gruppo, classe, corso,
+        anno, indagine, definizione, tipo_corso, ateneo, gruppo, classe, corso,
         sezione, categoria, indicatore
     )
 );
@@ -59,6 +71,9 @@ def apri_db(path):
 
 
 # Le righe di UNA scheda condividono questi campi: sono l'identita' della scheda.
+# NOTA: `definizione` NON va qui, pur essendo nella chiave primaria. Una singola
+# scheda 'occupazione' porta righe di ENTRAMBE le definizioni: metterla fra le
+# chiavi-scheda farebbe cancellare solo meta' della scheda a ogni ri-esecuzione.
 CHIAVI_SCHEDA = [
     "anno",
     "indagine",

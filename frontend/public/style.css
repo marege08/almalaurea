@@ -443,3 +443,27 @@ summary:focus-visible {
   .ai-richiesta { flex-direction: column; }
   .pulsante-primario { padding: 0.6rem; }
 }
+
+/* Selettore della definizione di "occupato" (indagine occupazione).
+   Sta sopra i filtri perche' cambia QUALI domande sono consultabili, non solo
+   i numeri: e' una scelta da fare prima di spuntare le caselle. */
+.riquadro-definizione {
+  border-left: 3px solid var(--bordo);
+  padding: 0.6rem 0 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+}
+.riga-definizione {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.riga-definizione label {
+  font-weight: 600;
+}
+.nota-definizione {
+  margin: 0.45rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--testo-tenue);
+}

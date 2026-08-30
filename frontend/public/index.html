@@ -142,6 +142,17 @@ Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code
         Tutte sono selezionate di default. Deseleziona quelle che non ti interessano
         per concentrarti su un confronto specifico.
       </p>
+      <!-- Selettore della definizione di "occupato". Resta nascosto finche'
+           app.js non trova almeno due definizioni nel database: le opzioni le
+           scrive lui, lette dai dati, non sono elencate qui. -->
+      <div id="riquadro-definizione" class="riquadro-definizione nascosto">
+        <div class="riga-definizione">
+          <label for="sel-definizione">Definizione di &laquo;occupato&raquo;</label>
+          <select id="sel-definizione"></select>
+        </div>
+        <p id="nota-definizione" class="nota-definizione"></p>
+      </div>
+
       <div id="accordion-filtri" class="accordion"></div>
     </section>
 

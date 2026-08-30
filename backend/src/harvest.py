@@ -1,15 +1,11 @@
-import requests
-from bs4 import BeautifulSoup
-
-# L'endpoint che hai scoperto. I parametri li teniamo separati dall'URL:
-# è più leggibile e requests li codifica correttamente per noi.
-URL = "https://www2.almalaurea.it/cgi-php/universita/statistiche/solotendine.php"
-
-
-# Uno User-Agent onesto: ti identifichi invece di fingerti un browser.
-# È la "frequenza educata" che ti eri imposto, applicata all'identità.
-HEADERS = {"User-Agent": "progetto-orientamento-laurea"}
-
+# Questo modulo decide COSA scaricare. Il download vero (URL, User-Agent,
+# parsing) vive in tools/scarica.py: qui dentro non parte nessuna richiesta.
+#
+# Nota storica: c'erano una costante URL che puntava a solotendine.php e uno
+# HEADERS accanto, e non li usava nessuno — il download e' sempre passato da
+# VISUALIZZA_URL in scarica.py. Sono due endpoint diversi (solotendine.php dice
+# quali opzioni sono valide, visualizza.php da' i numeri), e trovarli qui
+# faceva credere che l'harvester interrogasse il primo. Rimossi.
 
 ATENEI = [
     "70002",
@@ -110,10 +106,20 @@ GRUPPI = [
 ]  # 15 gruppi
 
 ANNO = "2025"
-CONFIG = "profilo"
+
+# Le due indagini AlmaLaurea. Stesse 93 schede aggregate, stesso endpoint:
+# cambia solo il valore di CONFIG.
+#   profilo     -> "Percorsi di laurea": com'e' andata l'universita'.
+#   occupazione -> "Esiti occupazionali della laurea": cosa succede dopo.
+INDAGINI = ("profilo", "occupazione")
+CONFIG = "profilo"  # default storico
 
 # Parametri "di base": tutto su 'tutti', nessuna disaggregazione.
 # Da qui partiamo e accendiamo UNA casella per volta a seconda del livello.
+#
+# pa / cs_univ / cs_facoa / cs_corsb non sono decorazione: senza di loro
+# CONFIG=occupazione risponde HTTP 400. Set canonico, copiato dalla query
+# string che manda il sito stesso (vedi il commento in tools/scarica.py).
 PARAMS_BASE = {
     "anno": ANNO,
     "corstipo": "tutti",
@@ -129,26 +135,33 @@ PARAMS_BASE = {
     "isstella": "0",
     "presiui": "tutti",
     "disaggregazione": "",
+    "pa": "tutti",
+    "cs_univ": "tutti",
+    "cs_facoa": "tutti",
+    "cs_corsb": "tutti",
     "LANG": "it",
     "CONFIG": CONFIG,
 }
 
 
-def genera_combinazioni():
-    """Restituisce la lista delle schede da scaricare.
+def genera_combinazioni(config=CONFIG, anno=ANNO):
+    """Restituisce la lista delle schede da scaricare per UNA indagine.
     Ogni elemento è un dict: {'livello':..., 'codice':..., 'params':...}.
     QUESTO è l'unico punto che cambia quando aggiungeremo i corsi."""
+    if config not in INDAGINI:
+        raise ValueError(f"indagine sconosciuta: {config!r} (attese: {INDAGINI})")
 
+    base = dict(PARAMS_BASE, CONFIG=config, anno=anno)
     combinazioni = []
 
     # Livello ATENEO: accendo 'ateneo', lascio il resto su 'tutti'
     for cod in ATENEI:
-        params = dict(PARAMS_BASE, ateneo=cod)
+        params = dict(base, ateneo=cod)
         combinazioni.append({"livello": "ateneo", "codice": cod, "params": params})
 
     # Livello GRUPPO: accendo 'gruppo', ateneo resta 'tutti'
     for cod in GRUPPI:
-        params = dict(PARAMS_BASE, gruppo=cod)
+        params = dict(base, gruppo=cod)
         combinazioni.append({"livello": "gruppo", "codice": cod, "params": params})
 
     return combinazioni
