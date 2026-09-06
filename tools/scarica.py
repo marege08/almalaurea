@@ -13,6 +13,13 @@ VISUALIZZA_URL = (
 )
 HEADERS = {"User-Agent": "progetto-orientamento-laurea"}
 
+# L'ALTRO endpoint. visualizza.php da' i NUMERI; solotendine.php dice quali
+# OPZIONI sono valide — ed e' l'unico modo di sapere quali corsi esistono
+# davvero in un ateneo, invece di indovinare codici.
+SOLOTENDINE_URL = (
+    "https://www2.almalaurea.it/cgi-php/universita/statistiche/solotendine.php"
+)
+
 # Una scheda ateneo che conosci: Bari (70002), profilo, anno singolo.
 # Livello "ateneo": ateneo acceso, tutto il resto su 'tutti'.
 #
@@ -63,6 +70,51 @@ def scarica_scheda(params):
     risposta = requests.get(VISUALIZZA_URL, params=params, headers=HEADERS, timeout=30)
     risposta.raise_for_status()
     return risposta.text
+
+
+
+def leggi_tendine(params):
+    """Le opzioni valide dei menu a tendina per UNA selezione, da
+    solotendine.php. Ritorna {nome_tendina: [(valore, etichetta), ...]},
+    con la voce 'tutti' scartata: serve all'interfaccia del sito, non e' una
+    scelta reale.
+
+    DUE CONDIZIONI, scoperte il 30 ago 2026 provando, non deducendo. Le
+    tendine di 'classe' e 'postcorso' restano VUOTE finche' non valgono
+    entrambe:
+
+      1. 'pa' deve essere il codice dell'ateneo, non 'tutti'. Nel form vero
+         del sito e' un input nascosto (`<input type="hidden" name="pa"
+         value="70002">`): e' il "punto di accesso", e senza di lui il sito
+         non sa di quale ateneo elencare i corsi.
+      2. 'corstipo' deve essere acceso ('L' = laurea di primo livello).
+         **'livello' NON basta**: livello=1 lascia le tendine vuote, perche'
+         e' un filtro sui DATI ("laurea di primo livello" come collettivo),
+         non il tipo di corso da elencare. E' esattamente la confusione su
+         cui si arrovellava il paragrafo A.3 di GestioneDatabase.md: non
+         c'era nessuna incongruenza fra i due endpoint, mancava corstipo.
+
+    Nota storica: GestioneDatabase.md dava questa funzione per gia' scritta
+    e funzionante ("leggi_tendine() che hai scritto"). Non esisteva: zero
+    occorrenze in tutto il repository. Questa e' la prima versione vera.
+    """
+    risposta = requests.get(
+        SOLOTENDINE_URL, params=params, headers=HEADERS, timeout=30
+    )
+    risposta.raise_for_status()
+    zuppa = BeautifulSoup(risposta.text, "html.parser")
+
+    tendine = {}
+    for select in zuppa.find_all("select"):
+        nome = select.get("name") or select.get("id")
+        if not nome:
+            continue
+        tendine[nome] = [
+            (opzione.get("value"), opzione.get_text(strip=True))
+            for opzione in select.find_all("option")
+            if opzione.get("value") not in (None, "", "tutti")
+        ]
+    return tendine
 
 
 def e_intestazione_colonna(testo):
