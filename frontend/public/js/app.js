@@ -15,6 +15,20 @@ import { chiediConfronto } from './ai/connettore.js';
 
 const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
 
+// --- Small-sample threshold ---
+// Below this number of respondents a percentage is unstable: with thirty
+// respondents, one case more or less moves the value by more than three
+// points, and the difference between two columns becomes noise. Cells based on
+// a sample smaller than the threshold are de-emphasized and explained in their
+// tooltip instead of being displayed like every other cell.
+//
+// Aggregate university and group data never fall below the threshold: the
+// smallest sample in the published database has 61 respondents. The mechanism
+// is intended for course-level data, where respondents regularly number only a
+// few dozen, and keeping it as a single constant makes it adjustable in one
+// place.
+const SOGLIA_CAMPIONE_PICCOLO = 40;
+
 // --- In-memory UI state ---
 let db = null;
 let codiciAteneo = [];
@@ -74,6 +88,7 @@ const elSelDefinizione = document.getElementById('sel-definizione');
 const elNotaDefinizione = document.getElementById('nota-definizione');
 const elTabellaHead = document.getElementById('tabella-head');
 const elTabellaBody = document.getElementById('tabella-body');
+const elLegendaCampione = document.getElementById('legenda-campione');
 
 /**
  * Displays an error message and optionally logs the underlying error.
@@ -451,6 +466,87 @@ function interrogaScheda(colonna) {
 
 // --- 5. Rendering the comparison table ---
 
+/**
+ * Formats a count with Italian digit grouping.
+ *
+ * @param {number|null|undefined} n - Count to format.
+ * @returns {string} Formatted count, or an em dash when the count is missing.
+ */
+const formattaNumero = (n) => (n != null ? n.toLocaleString('it-IT') : '—');
+
+// AlmaLaurea's own terms for respondents in each survey: graduate profile
+// survey respondents complete a questionnaire, while employment outcomes
+// survey respondents are interviewed by telephone. The labels quote
+// AlmaLaurea's wording.
+const NOME_RISPONDENTI = {
+  profilo: 'compilatori del questionario',
+  occupazione: 'intervistati',
+};
+
+/**
+ * Returns the sample on which one table cell is based.
+ *
+ * The sample is the respondent count of the survey that the row belongs to,
+ * not of the column as a whole, because the two surveys cover different
+ * populations. Respondents are the true denominator of a percentage; when
+ * that count is missing, the graduate count is used as the best available
+ * upper bound and the tooltip names it as such.
+ *
+ * @param {Map} numerosita - Sample sizes by survey.
+ * @param {string} indagine - Survey of the row.
+ * @returns {{indagine: string, numero: number, nome: string, laureati: (number|null)}|null}
+ *   Sample description, or null when no count is available.
+ */
+function campioneDellaRiga(numerosita, indagine) {
+  const n = numerosita.get(indagine);
+  if (!n) return null;
+  if (n.compilatori != null) {
+    return {
+      indagine,
+      numero: n.compilatori,
+      nome: NOME_RISPONDENTI[indagine] ?? 'rispondenti',
+      laureati: n.laureati,
+    };
+  }
+  if (n.laureati != null) {
+    return { indagine, numero: n.laureati, nome: 'laureati', laureati: null };
+  }
+  return null;
+}
+
+/**
+ * Returns whether a sample is below the small-sample threshold.
+ *
+ * @param {object|null} campione - Sample returned by campioneDellaRiga().
+ * @returns {boolean} True when the sample is known and below SOGLIA_CAMPIONE_PICCOLO.
+ */
+function campionePiccolo(campione) {
+  return campione != null && campione.numero < SOGLIA_CAMPIONE_PICCOLO;
+}
+
+/**
+ * Builds the tooltip line that states the sample behind a value.
+ *
+ * Below the threshold the text also explains why the sample size matters.
+ *
+ * @param {object} campione - Sample returned by campioneDellaRiga().
+ * @returns {string} Tooltip text.
+ */
+function testoCampione(campione) {
+  const base = `${formattaNumero(campione.numero)} ${campione.nome}`;
+  const suLaureati =
+    campione.laureati != null ? ` su ${formattaNumero(campione.laureati)} laureati` : '';
+  if (campionePiccolo(campione)) {
+    return (
+      `Campione piccolo: ${base}${suLaureati} (indagine ${campione.indagine}), ` +
+      `sotto la soglia di ${SOGLIA_CAMPIONE_PICCOLO}. Su cos\u00ec pochi rispondenti ` +
+      'una percentuale \u00e8 instabile: leggi il valore con prudenza e non fidarti ' +
+      'delle differenze piccole fra colonne.'
+    );
+  }
+  return `Campione: ${base}${suLaureati} (indagine ${campione.indagine}).`;
+}
+
 // Show one sample-size row for each survey present in the table. One number is
 // insufficient because the surveys cover different populations; assigning the
 // employment sample size to the profile (or vice versa) would mislabel the data.
@@ -468,7 +564,6 @@ function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate) {
   riga1.textContent = etichettaCodice(colonna.tipo, colonna.codice);
   contenitore.appendChild(riga1);
 
-  const it = (n) => (n != null ? n.toLocaleString('it-IT') : '—');
   for (const indagine of indaginiMostrate) {
     const n = numerosita.get(indagine);
     if (!n || n.laureati == null) continue;
@@ -478,8 +573,8 @@ function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate) {
     riga.style.display = 'block';
     riga.textContent =
       indagine === 'occupazione'
-        ? `${it(n.laureati)} laureati · ${it(n.compilatori)} intervistati`
-        : `${it(n.laureati)} laureati`;
+        ? `${formattaNumero(n.laureati)} laureati · ${formattaNumero(n.compilatori)} intervistati`
+        : `${formattaNumero(n.laureati)} laureati`;
     contenitore.appendChild(riga);
   }
   return contenitore;
@@ -502,10 +597,16 @@ function creaCellaTesto(testo, classe) {
 /**
  * Creates a table cell for a data value.
  *
+ * The sample size appears in the cell tooltip as well as in the column header,
+ * so a reader can see the sample behind a value without tracing its survey.
+ * Writing it as visible text would double the numbers in the table, so the
+ * visual marker is reserved for cells below the threshold.
+ *
  * @param {object|undefined} infoValore - Value information.
+ * @param {object|null} campione - Sample returned by campioneDellaRiga().
  * @returns {HTMLElement} Value cell.
  */
-function creaCellaValore(infoValore) {
+function creaCellaValore(infoValore, campione) {
   const td = document.createElement('td');
   if (!infoValore) {
     td.textContent = '—';
@@ -517,14 +618,42 @@ function creaCellaValore(infoValore) {
   td.className = infoValore.valore !== null && infoValore.valore !== undefined
     ? 'cella-valore'
     : 'cella-nota';
-  td.title = `Valore originale AlmaLaurea: ${infoValore.valore_raw}`;
+  if (campionePiccolo(campione)) td.classList.add('cella-campione-piccolo');
+
+  const righe = [];
+  if (campione) righe.push(testoCampione(campione));
+  righe.push(`Valore originale AlmaLaurea: ${infoValore.valore_raw}`);
+  td.title = righe.join('\n');
   return td;
+}
+
+/**
+ * Shows or hides the small-sample legend below the table.
+ *
+ * The legend appears only when at least one cell carries the marker, so the
+ * table gains no explanatory line for a case that does not occur. The text
+ * reads the threshold from the constant so that it cannot drift out of sync.
+ *
+ * @param {number} quante - Number of cells below the threshold.
+ */
+function aggiornaLegendaCampione(quante) {
+  if (!elLegendaCampione) return;
+  elLegendaCampione.classList.toggle('nascosto', quante === 0);
+  if (quante === 0) return;
+  elLegendaCampione.textContent =
+    `\u2731 Valore basato su meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: ` +
+    'campione piccolo, differenze piccole fra colonne non sono significative. ' +
+    'Passa il mouse su una cella per la numerosit\u00e0 esatta.';
 }
 
 /** Renders the comparison table from the current selections and database. */
 function renderTabella() {
   elTabellaHead.innerHTML = '';
   elTabellaBody.innerHTML = '';
+  // Recount on every render: the columns and questions, and therefore the
+  // cells below the threshold, can change.
+  let sottoSoglia = 0;
+  aggiornaLegendaCampione(0);
 
   if (colonne.length === 0) {
     const tr = document.createElement('tr');
@@ -591,8 +720,11 @@ function renderTabella() {
         tr.className = 'riga-domanda-intestazione';
         tr.appendChild(creaCellaTesto(voce.label, 'colonna-domanda'));
         const k = chiave(voce.indagine, voce.categoria, voce.indicatori[0]);
-        for (const { mappa } of datiPerColonna) {
-          tr.appendChild(creaCellaValore(mappa.get(k)));
+        for (const { mappa, numerosita } of datiPerColonna) {
+          const campione = campioneDellaRiga(numerosita, voce.indagine);
+          const cella = creaCellaValore(mappa.get(k), campione);
+          if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
+          tr.appendChild(cella);
         }
         elTabellaBody.appendChild(tr);
       } else {
@@ -611,14 +743,19 @@ function renderTabella() {
           tr.className = 'riga-indicatore';
           tr.appendChild(creaCellaTesto(indicatore, 'colonna-domanda'));
           const k = chiave(voce.indagine, voce.categoria, indicatore);
-          for (const { mappa } of datiPerColonna) {
-            tr.appendChild(creaCellaValore(mappa.get(k)));
+          for (const { mappa, numerosita } of datiPerColonna) {
+            const campione = campioneDellaRiga(numerosita, voce.indagine);
+            const cella = creaCellaValore(mappa.get(k), campione);
+            if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
+            tr.appendChild(cella);
           }
           elTabellaBody.appendChild(tr);
         }
       }
     }
   }
+
+  aggiornaLegendaCampione(sottoSoglia);
 }
 
 // --- 6. Startup ---
