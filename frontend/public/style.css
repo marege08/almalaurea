@@ -1,8 +1,7 @@
 /* style.css
  *
- * Stile minimo e funzionale. L'estetica definitiva è volutamente
- * rimandata (fase1-resoconto.md, §7 punto 4): qui l'obiettivo è
- * leggibilità e chiarezza, non un'identità visiva definitiva.
+ * Minimal, functional styling. A definitive visual identity is deliberately
+ * deferred: the current priority is readability and clarity.
  */
 
 :root {
@@ -36,7 +35,7 @@ main {
   padding: 0 1.5rem 3rem;
 }
 
-/* --- Intestazione --- */
+/* --- Header --- */
 
 .intestazione {
   padding: 2.5rem 1.5rem 1.5rem;
@@ -56,7 +55,7 @@ main {
   margin: 0;
 }
 
-/* --- Stato di caricamento / errore --- */
+/* --- Loading and error status --- */
 
 .banda-stato {
   background: var(--accento-chiaro);
@@ -79,7 +78,7 @@ main {
 
 .nascosto { display: none !important; }
 
-/* --- Pannelli --- */
+/* --- Panels --- */
 
 .pannello {
   background: var(--bg-pannello);
@@ -101,7 +100,7 @@ main {
   margin: 0 0 1rem;
 }
 
-/* --- Selettore schede --- */
+/* --- Sheet selector --- */
 
 .colonne-schede {
   display: flex;
@@ -153,7 +152,7 @@ main {
 
 .pulsante-secondario:hover { background: #d5e6e6; }
 
-/* --- Accordion filtri --- */
+/* --- Filter accordion --- */
 
 .accordion details {
   border-bottom: 1px solid var(--bordo);
@@ -192,7 +191,7 @@ main {
 
 .voce-checkbox input { margin-top: 0.2rem; }
 
-/* --- Tabella di confronto --- */
+/* --- Comparison table --- */
 
 .scroll-tabella {
   overflow-x: auto;
@@ -253,7 +252,7 @@ td.cella-nota {
   font-style: italic;
 }
 
-/* --- Piede pagina --- */
+/* --- Footer --- */
 
 .piede {
   max-width: 1100px;
@@ -267,7 +266,7 @@ td.cella-nota {
 
 .nota-piccola { font-size: 0.8rem; }
 
-/* --- Focus visibile (accessibilità) --- */
+/* --- Visible focus (accessibility) --- */
 
 a:focus-visible,
 button:focus-visible,
@@ -278,14 +277,14 @@ summary:focus-visible {
   outline-offset: 2px;
 }
 
-/* --- Responsive --- */
+/* --- Responsive layout --- */
 
 @media (max-width: 640px) {
   .intestazione h1 { font-size: 1.5rem; }
   .pannello { padding: 1rem; }
 }
 
-/* --- Strato AI (Fase 2) --- */
+/* --- AI layer --- */
 
 .ai-pannello { border-left: 3px solid var(--accento); }
 
@@ -384,8 +383,8 @@ summary:focus-visible {
 .ai-stato-attesa { color: var(--testo-tenue); }
 .ai-stato-errore { color: var(--avviso-testo); }
 
-/* Istruzioni per sbloccare un modello locale (CORS). Chiuse di default: le
-   apre l'utente, o le apre da sola app.js quando l'errore e' quello. */
+/* Instructions for enabling a local model (CORS). Closed by default; the user
+   can open them, or the application can open them when that error occurs. */
 .ai-aiuto { margin: 0 0 1rem; }
 .ai-aiuto summary {
   cursor: pointer;
@@ -427,7 +426,7 @@ summary:focus-visible {
   border-radius: 6px;
   overflow-x: auto;
 }
-/* Dentro un blocco di codice la cornice la mette gia' il <pre>. */
+/* Within a code block, the surrounding <pre> already provides the frame. */
 .ai-aiuto-corpo pre code {
   background: none;
   border: none;
@@ -444,9 +443,9 @@ summary:focus-visible {
   .pulsante-primario { padding: 0.6rem; }
 }
 
-/* Selettore della definizione di "occupato" (indagine occupazione).
-   Sta sopra i filtri perche' cambia QUALI domande sono consultabili, non solo
-   i numeri: e' una scelta da fare prima di spuntare le caselle. */
+/* Selector for the definition of "occupato" (employment outcomes survey).
+   It appears above the filters because it changes WHICH questions are
+   available, not only the numbers; it must be chosen before the checkboxes. */
 .riquadro-definizione {
   border-left: 3px solid var(--bordo);
   padding: 0.6rem 0 0.6rem 0.9rem;

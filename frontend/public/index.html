@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Confronta i dati AlmaLaurea</title>
 <link rel="stylesheet" href="style.css" />
-<!-- sql.js via CDN: nessun bundler richiesto. Versione fissata a 1.14.0,
-     libreria esterna aggiornata a mano quando serve, non a runtime. -->
+<!-- sql.js is loaded via CDN, so no bundler is required. Version 1.14.0 is
+     pinned; the external library is updated manually when needed, not at runtime. -->
 <script src="https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/sql-wasm.js"></script>
 </head>
 <body>
@@ -142,9 +142,9 @@ Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code
         Tutte sono selezionate di default. Deseleziona quelle che non ti interessano
         per concentrarti su un confronto specifico.
       </p>
-      <!-- Selettore della definizione di "occupato". Resta nascosto finche'
-           app.js non trova almeno due definizioni nel database: le opzioni le
-           scrive lui, lette dai dati, non sono elencate qui. -->
+      <!-- Selector for the definition of "occupato". It remains hidden until
+           the application finds at least two definitions in the database; the
+           options are read from the data and generated dynamically, not listed here. -->
       <div id="riquadro-definizione" class="riquadro-definizione nascosto">
         <div class="riga-definizione">
           <label for="sel-definizione">Definizione di &laquo;occupato&raquo;</label>
