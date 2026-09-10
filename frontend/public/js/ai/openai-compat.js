@@ -1,16 +1,23 @@
 // openai-compat.js
 //
-// Adattatore per la "forma OpenAI-compatibile": /chat/completions con
-// function calling. Copre OpenAI, i provider cloud OpenAI-compat e i runner
-// locali (Ollama http://localhost:11434/v1, LM Studio, llama.cpp, vLLM...).
+// Adapter for the OpenAI-compatible /chat/completions function-calling API.
+// It covers OpenAI, compatible cloud providers, and local runners such as
+// Ollama, LM Studio, llama.cpp, and vLLM.
 //
-// Interfaccia comune a tutti gli adattatori:
-//   chiedi(config, systemPrompt, tool, frase) -> Promise<oggetto grezzo query>
-// Restituisce l'oggetto ARGOMENTI del tool-call, NON validato: la validazione
-// e' compito di validatore.js (il muro). Qui ci limitiamo a parlare l'API.
+// The common adapter interface returns tool-call arguments without validation;
+// validatore.js performs validation, while this module handles API transport.
 
 import { TOOL_OPENAI, NOME_STRUMENTO } from './tool-schema.js';
 
+/**
+ * Sends a natural-language request through an OpenAI-compatible endpoint.
+ *
+ * @param {{baseUrl: string, model: string, apiKey?: string}} config - Provider configuration.
+ * @param {string} systemPrompt - Instructions and the closed vocabulary.
+ * @param {string} frase - User request in natural language.
+ * @returns {Promise<object>} Unvalidated tool-call arguments.
+ * @throws {Error} If the HTTP response is unsuccessful or no JSON tool result is found.
+ */
 export async function chiedi(config, systemPrompt, frase) {
   const url = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
   const headers = { 'Content-Type': 'application/json' };
@@ -23,8 +30,8 @@ export async function chiedi(config, systemPrompt, frase) {
       { role: 'user', content: frase },
     ],
     tools: [TOOL_OPENAI],
-    // Forziamo la chiamata al nostro strumento dove il provider lo supporta.
-    // I runner che ignorano tool_choice ripiegano sul fallback piu' sotto.
+    // Request the application tool where supported; local runners that ignore
+    // tool_choice are handled by the content fallback below.
     tool_choice: { type: 'function', function: { name: NOME_STRUMENTO } },
     stream: false,
   };
@@ -42,7 +49,7 @@ export async function chiedi(config, systemPrompt, frase) {
   const dati = await risposta.json();
   const messaggio = dati?.choices?.[0]?.message;
 
-  // Percorso normale: tool_calls con gli argomenti come stringa JSON.
+  // Normal response: tool_calls contains the arguments as a JSON string.
   const toolCall = messaggio?.tool_calls?.find(
     (t) => t?.function?.name === NOME_STRUMENTO
   );
@@ -50,8 +57,7 @@ export async function chiedi(config, systemPrompt, frase) {
     return estraiJson(toolCall.function.arguments);
   }
 
-  // Fallback per modelli locali che mettono il JSON nel contenuto invece
-  // di usare il canale tool_calls.
+  // Fallback for local models that place JSON in content instead of tool_calls.
   if (typeof messaggio?.content === 'string' && messaggio.content.trim()) {
     return estraiJson(messaggio.content);
   }
@@ -59,8 +65,15 @@ export async function chiedi(config, systemPrompt, frase) {
   throw new Error('AI (OpenAI-compat): nessuna chiamata allo strumento nella risposta.');
 }
 
-// Estrae un oggetto JSON da una stringa che potrebbe contenere testo intorno
-// (thinking, code fence...). Non "corregge" i dati: solo parsing robusto.
+/**
+ * Extracts a JSON value from a response that may contain surrounding text.
+ * The function does not correct data; it only makes parsing tolerant of
+ * reasoning text and code fences.
+ *
+ * @param {string|object} testo - Raw response text or an already parsed value.
+ * @returns {object} Parsed JSON value, or the original non-string value.
+ * @throws {Error} If no valid JSON object can be parsed.
+ */
 function estraiJson(testo) {
   if (typeof testo !== 'string') return testo;
   try {

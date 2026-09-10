@@ -1,26 +1,24 @@
 # -*- coding: utf-8 -*-
-"""Rigenera nomi-ateneo.js e nomi-gruppo.js dai menu a tendina di AlmaLaurea.
+"""Regenerate nomi-ateneo.js and nomi-gruppo.js from AlmaLaurea dropdowns.
 
-PERCHE' ESISTE: i due file mappano codice -> nome (es. "70003" -> "Bologna").
-I nomi NON vanno mai scritti a memoria: sono presi dai menu a tendina reali
-del sito AlmaLaurea, salvati in backend/dati-sorgente/ateneo-numero.txt.
-Quel file contiene entrambe le tendine (atenei e gruppi disciplinari) cosi'
-come le serve il sito. Prima stava in docs/, che e' escluso da git: la
-sorgente dei due file generati non era nel repository, quindi nessuno che
-clonasse il progetto poteva rigenerarli. Ora sorgente e generatore sono
-tracciati insieme al risultato.
+WHY IT EXISTS: the two files map codes to names (for example, "70003" to
+"Bologna"). Names must NEVER be written from memory: they are taken from the
+real AlmaLaurea dropdowns and saved in backend/dati-sorgente/ateneo-numero.txt.
+That file contains both dropdowns (universities and disciplinary groups) as
+used by the site. Keeping the source and generator with the generated files
+allows any project clone to regenerate them.
 
-COSA FA:
-  - estrae le <option> delle due tendine, scartando la voce "tutti" (serve
-    all'interfaccia del sito, non e' un ateneo/gruppo reale);
-  - CONTROLLA la copertura contro almalaurea.sqlite: ogni codice presente nel
-    database deve avere un nome, e viceversa. Un nome mancante in UI e' un
-    codice grezzo mostrato all'utente, quindi il controllo e' parte del lavoro;
-  - riscrive i due moduli JS.
+WHAT IT DOES:
+  - extracts the <option> elements from both dropdowns, excluding "tutti"
+    (used by the site interface, not a real university or group);
+  - CHECKS coverage against almalaurea.sqlite: every code in the database
+    must have a name, and vice versa. A missing UI name exposes a raw code to
+    the user, so this check is part of the work;
+  - rewrites both JS modules.
 
-USO:
-    python3 tools/genera_nomi.py            # scrive i file
-    python3 tools/genera_nomi.py --check    # non scrive, verifica e basta
+USAGE:
+    python3 tools/genera_nomi.py            # writes the files
+    python3 tools/genera_nomi.py --check    # does not write; only checks
 """
 
 import argparse
@@ -69,7 +67,7 @@ INTESTAZIONE_GRUPPO = """/**
  */
 """
 
-# Le due tendine si distinguono dall'attributo name del <select> che le apre.
+# The two dropdowns are distinguished by the name attribute of their <select>.
 RE_SELECT = re.compile(r'<select[^>]*name="(?P<nome>[^"]+)"', re.IGNORECASE)
 RE_OPTION = re.compile(
     r'<option[^>]*value="(?P<codice>[^"]*)"[^>]*>(?P<nome>.*?)</option>',
@@ -78,9 +76,17 @@ RE_OPTION = re.compile(
 
 
 def estrai_tendine(testo):
-    """Ritorna {nome_tendina: {codice: nome}} dal frammento HTML salvato.
-    L'ordine di inserimento e' quello del sito (alfabetico per gli atenei):
-    viene conservato, cosi' il file generato si legge come la tendina."""
+    """Extract ``{dropdown_name: {code: name}}`` from the saved HTML fragment.
+
+    Preserve the site's insertion order (alphabetical for universities) so
+    that the generated file reads like the dropdown.
+
+    Args:
+        testo: Saved HTML containing the dropdowns.
+
+    Returns:
+        A mapping from dropdown names to code/name mappings.
+    """
     tendine = {}
     corrente = None
     for pezzo in re.split(r"(?=<select)", testo, flags=re.IGNORECASE):
@@ -94,12 +100,20 @@ def estrai_tendine(testo):
             codice = opzione.group("codice").strip()
             nome = html.unescape(opzione.group("nome")).strip()
             if codice == "tutti" or not codice:
-                continue  # voce di comodo della UI del sito, non un dato
+                continue  # Convenience UI option, not a data value.
             tendine[corrente][codice] = nome
     return tendine
 
 
 def codici_nel_db(colonna):
+    """Return the distinct non-empty codes stored in a database column.
+
+    Args:
+        colonna: Database column containing the codes.
+
+    Returns:
+        A set of distinct non-empty codes.
+    """
     conn = sqlite3.connect(DB)
     try:
         return {
@@ -113,8 +127,18 @@ def codici_nel_db(colonna):
 
 
 def verifica_copertura(etichetta, mappa, colonna):
-    """Confronta i codici della tendina con quelli davvero nel dataset.
-    Ritorna la lista dei problemi (vuota = copertura perfetta)."""
+    """Compare dropdown codes with those actually present in the dataset.
+
+    Return a list of problems; an empty list means coverage is complete.
+
+    Args:
+        etichetta: Human-readable label for the coverage report.
+        mappa: Dropdown code-to-name mapping.
+        colonna: Database column containing the codes.
+
+    Returns:
+        A list of coverage problems.
+    """
     if not DB.exists():
         return [f"{etichetta}: database assente, copertura non verificata"]
     nel_db = codici_nel_db(colonna)
@@ -137,7 +161,17 @@ def verifica_copertura(etichetta, mappa, colonna):
 
 
 def rendi_ateneo(mappa):
-    """Stile storico di nomi-ateneo.js: ordine della tendina, virgola finale."""
+    """Render nomi-ateneo.js using its established format.
+
+    The generated module preserves dropdown order and includes a trailing
+    comma after each mapping entry.
+
+    Args:
+        mappa: University code-to-name mapping.
+
+    Returns:
+        The generated JavaScript module text.
+    """
     righe = [
         f"  {json.dumps(codice, ensure_ascii=False)}: {json.dumps(nome, ensure_ascii=False)},"
         for codice, nome in mappa.items()
@@ -150,13 +184,30 @@ def rendi_ateneo(mappa):
 
 
 def rendi_gruppo(mappa):
-    """Stile storico di nomi-gruppo.js: chiavi ordinate, niente virgola finale."""
+    """Render nomi-gruppo.js using sorted keys and no trailing comma.
+
+    Args:
+        mappa: Disciplinary-group code-to-name mapping.
+
+    Returns:
+        The generated JavaScript module text.
+    """
     ordinata = {c: mappa[c] for c in sorted(mappa)}
     corpo = json.dumps(ordinata, indent=2, ensure_ascii=False)
     return f"{INTESTAZIONE_GRUPPO}\nexport const NOMI_GRUPPO = {corpo};\n"
 
 
 def scrivi(percorso, testo, solo_controllo):
+    """Write generated text unless check-only mode detects a mismatch.
+
+    Args:
+        percorso: Destination path.
+        testo: Generated file contents.
+        solo_controllo: Whether to report differences without writing.
+
+    Returns:
+        True when the destination matches or is written successfully.
+    """
     attuale = percorso.read_text(encoding="utf-8") if percorso.exists() else None
     nome = percorso.relative_to(RADICE)
     if attuale == testo:
@@ -171,6 +222,7 @@ def scrivi(percorso, testo, solo_controllo):
 
 
 def main():
+    """Parse arguments, generate both name modules, and report their status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",

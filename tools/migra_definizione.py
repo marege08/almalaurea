@@ -1,23 +1,24 @@
 # -*- coding: utf-8 -*-
-"""Migrazione: aggiunge la colonna `definizione` alla tabella dati.
+"""Migrate the data table by adding the `definizione` column.
 
-PERCHE' SERVE: le schede dell'indagine `occupazione` contengono DUE volte le
-stesse sezioni, una per ciascuna definizione ufficiale di "occupato"
-(restrittiva e ampia/ISTAT-Forze di Lavoro). Hanno sezione, categoria e
-indicatore identici: senza una colonna che le distingua avrebbero la stessa
-chiave primaria e una sovrascriverebbe l'altra in silenzio, lasciando in
-database un tasso di occupazione di cui non si sa piu' quale definizione sia.
+WHY IT IS NEEDED: `occupazione` employment outcomes survey sheets contain the same sections
+TWICE, once for each official definition of "occupato" (restrictive and
+broad/ISTAT-Forze di Lavoro). Their section, category, and indicator are
+identical: without a column distinguishing them, they would have the same
+primary key and one would silently overwrite the other, leaving an employment
+rate whose definition could no longer be identified.
 
-SQLite non sa modificare una chiave primaria: l'unica strada e' ricreare la
-tabella e travasare. La migrazione e' idempotente (se la colonna c'e' gia',
-non fa nulla) e verifica il conteggio righe prima di buttare la vecchia.
+SQLite cannot modify a primary key: the only option is to recreate the table
+and transfer the data. The migration is idempotent (if the column already
+exists, it does nothing) and checks the row count before dropping the old
+table.
 
-Le righe esistenti (indagine 'profilo') prendono definizione = '', che e' la
-stessa convenzione gia' usata dallo schema per "casella spenta".
+Existing rows (`profilo` graduate profile survey) receive definizione = '', the same convention
+already used by the schema for a field to which the definition does not apply.
 
-USO:
-    python3 tools/migra_definizione.py            # migra
-    python3 tools/migra_definizione.py --check    # dice solo se serve
+USAGE:
+    python3 tools/migra_definizione.py            # migrates
+    python3 tools/migra_definizione.py --check    # only reports whether needed
 """
 
 import argparse
@@ -31,6 +32,7 @@ RADICE = Path(__file__).resolve().parent.parent
 DB = RADICE / "frontend" / "public" / "almalaurea.sqlite"
 CARTELLA_BACKUP = RADICE / "backend" / "backup-db"
 
+# The `definizione` column takes '', 'restrittiva', or 'ampia'.
 SCHEMA_NUOVO = """
 CREATE TABLE dati_migrata (
     anno               TEXT    NOT NULL,
@@ -71,10 +73,20 @@ FROM dati;
 
 
 def colonne_di(conn, tabella):
+    """Return the column names reported by SQLite for a table.
+
+    Args:
+        conn: Open SQLite connection.
+        tabella: Table whose columns should be inspected.
+
+    Returns:
+        A list of column names in SQLite's reported order.
+    """
     return [r[1] for r in conn.execute(f"PRAGMA table_info({tabella})")]
 
 
 def main():
+    """Parse arguments and migrate the database when required."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true",
                         help="non modifica nulla: esce 1 se la migrazione serve ancora")
@@ -95,7 +107,7 @@ def main():
             print("DA MIGRARE.")
             return 1
 
-        # Copia di sicurezza prima di riscrivere: la tabella viene ricreata.
+        # Create a safety copy before rewriting because the table is recreated.
         CARTELLA_BACKUP.mkdir(parents=True, exist_ok=True)
         marca = datetime.now().strftime("%Y%m%d-%H%M%S")
         copia = CARTELLA_BACKUP / f"almalaurea-pre-definizione-{marca}.sqlite"

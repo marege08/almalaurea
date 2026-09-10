@@ -1,14 +1,14 @@
 // tool-schema.js
 //
-// Lo strumento (tool/function) che l'AI e' obbligata a compilare. Lo schema
-// E' la query: quali colonne (ateneo/gruppo) confrontare e quali domande
-// mostrare. Punti di integrita' (fase2-progettazione.md, §3):
-//   - i valori sono ENUM di codici/id reali -> dove il provider valida in
-//     modo stretto, l'AI non puo' nemmeno nominare qualcosa di inesistente;
-//   - NON esiste alcun campo "valore": l'AI non ha dove scrivere un numero.
+// The tool/function the AI must fill in. Its schema is the query: which
+// university or discipline-group columns to compare and which questions to
+// display. Integrity constraints:
+//   - values are ENUMs of real codes/IDs, so strict providers prevent the AI
+//     from naming nonexistent entities;
+//   - there is no "valore" field, so the AI has nowhere to write a number.
 //
-// Esportato in due forme, cosi' lo stesso strumento parla sia con l'API
-// Anthropic sia con qualsiasi endpoint OpenAI-compatibile (cloud o locale).
+// The same tool is exported in the formats required by Anthropic and by
+// OpenAI-compatible endpoints, whether cloud-hosted or local.
 
 import { CODICI_TUTTI, ID_DOMANDE_VALIDI } from './vocabolario.js';
 
@@ -19,7 +19,7 @@ const DESCRIZIONE_TOOL =
   'disciplinari) e le domande da visualizzare. Non restituire mai valori o ' +
   'numeri: solo le SCELTE. I numeri li calcola il sito dal dataset ufficiale.';
 
-// Lo schema dei parametri, condiviso (JSON Schema puro).
+// Shared parameter schema expressed as plain JSON Schema.
 const PARAMETRI = {
   type: 'object',
   properties: {
@@ -55,15 +55,15 @@ const PARAMETRI = {
   additionalProperties: false,
 };
 
-// Forma Anthropic (Messages API): tools[].input_schema.
+// Anthropic Messages API format: tools[].input_schema.
 export const TOOL_ANTHROPIC = {
   name: NOME_TOOL,
   description: DESCRIZIONE_TOOL,
   input_schema: PARAMETRI,
 };
 
-// Forma OpenAI-compatibile (chat/completions e la maggior parte dei runner
-// locali): tools[].function.parameters, con "strict" dove supportato.
+// OpenAI-compatible format for chat/completions and most local runners:
+// tools[].function.parameters, with "strict" where supported.
 export const TOOL_OPENAI = {
   type: 'function',
   function: {

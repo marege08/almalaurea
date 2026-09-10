@@ -1,35 +1,33 @@
 # -*- coding: utf-8 -*-
-"""Rigenera frontend/public/js/config-filtri.js a partire dal database.
+"""Regenerate frontend/public/js/config-filtri.js from the database.
 
-PERCHE' ESISTE: config-filtri.js non e' scritto a mano. Nasce da una query
-DISTINCT (sezione, categoria, indicatore) su almalaurea.sqlite. Prima questo
-script viveva solo nella sessione in cui e' stato usato: il file generato era
-nel repo, il generatore no. Bastava un aggiornamento annuale dei dati per
-ritrovarsi a dover mantenere 997 righe a mano, o a riscrivere da zero la
-logica di raggruppamento. Ora e' qui.
+WHY IT EXISTS: config-filtri.js is not written by hand. It is produced by a
+DISTINCT (sezione, categoria, indicatore) query on almalaurea.sqlite. Keeping
+the generator with the generated file avoids maintaining 997 lines by hand or
+rewriting the grouping logic from scratch after an annual data update.
 
-COSA FA (le stesse regole documentate in fase1-resoconto.md §5.1-5.2):
-  - L'unita' di filtro e' la DOMANDA, non l'indicatore grezzo:
-      categoria != ''  -> la domanda e' (sezione, categoria); gli indicatore
-                          sotto di essa sono le opzioni di risposta.
-      categoria == ''  -> l'indicatore e' gia' completo da solo: e' la sua
-                          stessa domanda, un gruppo da un elemento.
-  - La macro-categoria si deriva meccanicamente dalla sezione ufficiale
-    AlmaLaurea (tabella SEZIONE_A_MACRO qui sotto), non voce per voce.
-  - L'id e' uno slug dell'etichetta: minuscolo, accenti spogliati, tutto cio'
-    che non e' lettera/numero diventa '_', troncato a 80 caratteri (con
-    disambiguazione se due etichette collidono lo stesso).
+WHAT IT DOES:
+  - The filter unit is the QUESTION, not the raw indicator:
+      categoria != ''  -> the question is (sezione, categoria); its
+                          indicators are the response options.
+      categoria == ''  -> the indicator is already complete on its own: it is
+                          its own question, a one-element group.
+  - The macro-category is derived mechanically from the official AlmaLaurea
+    section (the SEZIONE_A_MACRO table below), not entry by entry.
+  - The id is a label slug: lowercase, accents removed, every non-letter or
+    non-number becomes '_', truncated to 80 characters (with disambiguation
+    if two labels collide).
 
-USO:
-    python3 tools/genera_config_filtri.py            # scrive il file
-    python3 tools/genera_config_filtri.py --check    # non scrive, dice solo
-                                                     # se il file e' allineato
+USAGE:
+    python3 tools/genera_config_filtri.py            # writes the file
+    python3 tools/genera_config_filtri.py --check    # does not write; reports
+                                                     # whether the file matches
 
-ATTENZIONE PER IL FUTURO: se un aggiornamento dei dati cambia le etichette,
-cambiano anche gli id (sono derivati dalle etichette). Gli id finiscono nel
-vocabolario che lo strato AI mostra al modello, quindi vanno rigenerati
-insieme, mai lasciati disallineati. Vedi la sezione "Come si aggiornano i
-dati" nel README.
+FUTURE MAINTENANCE: if a data update changes the labels, the ids also change
+because they are derived from the labels. The ids are included in the
+vocabulary exposed to the model by the AI layer, so they must be regenerated
+together and must not be left out of sync. See the data update section in the
+README.
 """
 
 import argparse
@@ -44,19 +42,20 @@ RADICE = Path(__file__).resolve().parent.parent
 DB = RADICE / "frontend" / "public" / "almalaurea.sqlite"
 USCITA = RADICE / "frontend" / "public" / "js" / "config-filtri.js"
 
-# Le sezioni ufficiali delle schede AlmaLaurea raggruppate nelle macro-categorie
-# pensate per chi sta scegliendo un corso (fase1-resoconto §3.2).
+# Official sections from AlmaLaurea sheets grouped into macro-categories
+# intended for people choosing a degree programme.
 #
-# Sono DUE indagini, e si riconoscono a occhio: il profilo dei laureati usa
-# titoli in maiuscolo, l'indagine occupazione no. Le 8 sezioni di occupazione
-# stanno tutte in una macro-categoria sola, "Dopo la Laurea", per una ragione
-# di sostanza e non di estetica: "Lavoro e Futuro" del profilo raccoglie le
-# ASPETTATIVE del neolaureato, occupazione racconta cosa gli e' successo
-# DAVVERO a 1/3/5 anni. Mescolarle farebbe leggere un numero credendo che ne
-# dica un altro. Sono 22 domande (108 indicatori grezzi, che il
-# raggruppamento per (sezione, categoria) riduce a 22).
+# There are TWO surveys, distinguishable by inspection: the graduate profile
+# survey uses uppercase titles, whereas the employment outcomes survey does
+# not. All 8 employment outcomes survey sections belong to the single
+# "Dopo la Laurea" macro-category for a substantive rather than aesthetic
+# reason: "Lavoro e Futuro" in the graduate profile survey records a new
+# graduate's EXPECTATIONS, while the employment outcomes survey records
+# what actually happened at 1/3/5 years. Mixing them would make one number
+# appear to describe the other. There are 22 questions (108 raw indicators,
+# reduced to 22 by grouping on (sezione, categoria)).
 SEZIONE_A_MACRO = {
-    # --- indagine "profilo" ---
+    # graduate profile survey
     "1. CARATTERISTICHE ANAGRAFICHE": "Profilo Studente",
     "2. ORIGINE SOCIALE": "Profilo Studente",
     "3. STUDI SECONDARI DI SECONDO GRADO": "Profilo Studente",
@@ -67,7 +66,7 @@ SEZIONE_A_MACRO = {
     "8. CONOSCENZE LINGUISTICHE E INFORMATICHE": "Competenze e Ambiente",
     "9. PROSPETTIVE DI STUDIO": "Successo e Percorso",
     "10. PROSPETTIVE DI LAVORO": "Lavoro e Futuro",
-    # --- indagine "occupazione" ---
+    # employment outcomes survey
     "2b. Formazione post-laurea": "Dopo la Laurea",
     "3. Condizione occupazionale": "Dopo la Laurea",
     "4. Ingresso nel mercato del lavoro": "Dopo la Laurea",
@@ -78,8 +77,9 @@ SEZIONE_A_MACRO = {
     "9. Efficacia della laurea e soddisfazione per l´attuale lavoro": "Dopo la Laurea",
 }
 
-# Ordine in cui le macro-categorie compaiono nella UI: dal percorso di studi
-# al dopo-laurea, poi il contorno. Non alfabetico: e' una scelta di lettura.
+# Order in which macro-categories appear in the UI: from the degree path to
+# post-graduation, then surrounding context. It is intentionally not
+# alphabetical; it is a reading choice.
 ORDINE_MACRO = [
     "Successo e Percorso",
     "Lavoro e Futuro",
@@ -88,10 +88,10 @@ ORDINE_MACRO = [
     "Profilo Studente",
 ]
 
-# 80 e non 60: due domande di "Dopo la Laurea" cominciano con le stesse
-# 60 lettere e divergono al carattere 61, quindi a 60 producevano lo stesso
-# id. Con id duplicati getElementById restituisce solo il primo e la
-# seconda domanda avrebbe una casella che non risponde.
+# 80 rather than 60: two "Dopo la Laurea" questions start with the same
+# 60 letters and diverge at character 61, so a limit of 60 produced the same
+# id for both. With duplicate ids, getElementById returns only the first and
+# the second question would have an unresponsive control.
 LUNGHEZZA_MASSIMA_ID = 80
 
 INTESTAZIONE = """/**
@@ -151,9 +151,18 @@ INTESTAZIONE = """/**
 
 
 def slug(etichetta):
-    """Etichetta leggibile -> id stabile e usabile come id HTML.
-    Spoglia gli accenti invece di cancellarli ('Regolarità' -> 'regolarita'),
-    cosi' l'id resta leggibile e non dipende dalla codifica."""
+    """Convert a readable label into a stable, usable HTML id.
+
+    Accents are stripped rather than deleting their letters
+    ('Regolarità' -> 'regolarita'), keeping the id readable and independent of
+    character encoding.
+
+    Args:
+        etichetta: Readable label to convert.
+
+    Returns:
+        A normalized, truncated HTML id.
+    """
     senza_accenti = "".join(
         c
         for c in unicodedata.normalize("NFD", etichetta)
@@ -164,16 +173,23 @@ def slug(etichetta):
 
 
 def leggi_combinazioni(db_path):
-    """Le combinazioni distinte (indagine, definizione, sezione, categoria,
-    indicatore). E' l'unica lettura dal DB: nessun valore numerico entra qui.
+    """Read distinct survey, definition, and question combinations.
 
-    La `definizione` serve perche' le due definizioni di "occupato" NON pongono
-    esattamente le stesse domande: 16 sono in comune, 2 esistono solo con la
-    definizione ampia ("Ricerca del lavoro", "Ripartizione geografica di
-    lavoro") e 2 solo con la restrittiva ("Condizione occupazionale", "Area
-    geografica di lavoro"). Ogni voce si porta quindi l'elenco delle
-    definizioni sotto cui esiste, cosi' la UI puo' nascondere quelle che non
-    ci sono invece di mostrare una riga di trattini."""
+    This is the only database read; no numeric value enters this function.
+    The `definizione` field is needed because the two definitions of
+    "occupato" do NOT ask exactly the same questions: 16 are shared, 2 exist
+    only for the broad definition ("Ricerca del lavoro", "Ripartizione
+    geografica di lavoro"), and 2 only for the restrictive definition
+    ("Condizione occupazionale", "Area geografica di lavoro"). Each entry
+    therefore carries the definitions under which it exists, allowing the UI
+    to hide unavailable questions instead of showing a row of dashes.
+
+    Args:
+        db_path: Path to the SQLite database.
+
+    Returns:
+        The distinct database rows as tuples.
+    """
     conn = sqlite3.connect(db_path)
     try:
         return conn.execute(
@@ -185,21 +201,29 @@ def leggi_combinazioni(db_path):
 
 
 def costruisci_config(combinazioni):
-    """Raggruppa le combinazioni in domande e le smista nelle macro-categorie.
-    Ritorna (config, problemi): i problemi non fermano la generazione, si
-    stampano — un dataset nuovo puo' portare sorprese e vanno viste, non
-    nascoste."""
+    """Group combinations into questions and assign macro-categories.
+
+    Return ``(config, problemi)``. Problems do not stop generation; they are
+    printed because a new dataset may contain surprises that should be seen,
+    not hidden.
+
+    Args:
+        combinazioni: Distinct survey, definition, section, category, and
+            indicator tuples.
+
+    Returns:
+        A configuration mapping and a list of detected problems.
+    """
     problemi = []
-    domande = {}  # (sezione, categoria, indicatore_se_standalone) -> voce
-    # Ogni sezione deve appartenere a UNA sola indagine: e' il presupposto che
-    # permette alla voce di portarsi dietro l'indagine, e quindi ad app.js di
-    # filtrarci sopra senza doverla dedurre. Se un dataset futuro lo rompesse,
-    # si deve sapere subito invece di scoprirlo da un numero sbagliato.
+    domande = {}  # (sezione, categoria, standalone indicator) -> entry
+    # Each section must belong to ONE survey. This lets each entry carry its
+    # survey and lets app.js filter on it without deriving it. If a future
+    # dataset violates this assumption, it must be reported immediately
+    # rather than discovered through an incorrect number.
     indagine_di_sezione = {}
-    # Una sezione non mappata dev'essere segnalata UNA volta con il conteggio:
-    # un avviso per voce sono cento righe identiche, cioe' un avviso che
-    # nessuno legge. Le sezioni dell'indagine 'occupazione' finiscono qui
-    # finche' non vengono assegnate a una macro-categoria.
+    # Report each unmapped section once with a count. One warning per entry
+    # would produce a hundred identical lines that nobody reads. Employment
+    # sections remain here until they are assigned to a macro-category.
     non_mappate = {}
 
     for indagine, definizione, sezione, categoria, indicatore in combinazioni:
@@ -212,14 +236,14 @@ def costruisci_config(combinazioni):
         if sezione not in SEZIONE_A_MACRO:
             non_mappate[sezione] = non_mappate.get(sezione, 0) + 1
             continue
-        # Standalone: ogni indicatore e' una domanda a se'. Con categoria:
-        # tutti gli indicatori confluiscono nella stessa domanda.
+        # Standalone: each indicator is its own question. With a category, all
+        # indicators belong to the same question.
         chiave = (sezione, categoria, indicatore if categoria == "" else "")
         etichetta = categoria if categoria else indicatore
         voce = domande.setdefault(
             chiave,
             {
-                "id": None,  # assegnato dopo l'ordinamento, vedi sotto
+                "id": None,  # assigned after sorting; see below
                 "label": etichetta,
                 "indagine": indagine,
                 "definizioni": set(),
@@ -238,15 +262,14 @@ def costruisci_config(combinazioni):
         config[SEZIONE_A_MACRO[voce["sezione"]]].append(voce)
 
     for macro in ORDINE_MACRO:
-        # Ordine stabile e riproducibile: sezione, poi categoria, poi etichetta.
+        # Stable, reproducible order: section, then category, then label.
         config[macro].sort(key=lambda v: (v["sezione"], v["categoria"], v["label"]))
 
-    # Gli id si assegnano QUI, dopo l'ordinamento, non alla creazione della
-    # voce: cosi' l'ordine di assegnazione e' riproducibile e, se due etichette
-    # collidono, il suffisso cade sempre sulla stessa delle due, run dopo run.
-    # Prima questo blocco si limitava a SEGNALARE i duplicati e scriveva
-    # comunque un file rotto (due voci con lo stesso id HTML: la seconda
-    # casella non risponde). Ora il duplicato viene reso impossibile.
+    # Assign ids HERE, after sorting rather than when creating entries, so the
+    # assignment order is reproducible and a collision always receives the
+    # suffix on the same label from one run to the next. Reporting duplicates
+    # while still writing a broken file would leave two entries with the same
+    # HTML id and the second control unresponsive, so duplicates are prevented.
     visti = {}
     for macro in ORDINE_MACRO:
         for voce in config[macro]:
@@ -275,11 +298,20 @@ def costruisci_config(combinazioni):
 
 
 def rendi_javascript(config):
+    """Render the filter configuration as an ES module.
+
+    Args:
+        config: Macro-category to filter-question mapping.
+
+    Returns:
+        The generated JavaScript module text.
+    """
     corpo = json.dumps(config, indent=2, ensure_ascii=False)
     return f"{INTESTAZIONE}\nexport const CONFIG_FILTRI = {corpo};\n"
 
 
 def main():
+    """Parse command-line arguments and generate or check the filter module."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",

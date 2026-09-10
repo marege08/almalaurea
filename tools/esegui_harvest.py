@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Esegue l'harvest degli aggregati: per ogni selezione scarica la scheda,
-la monta in righe tidy e la salva su SQLite. Resiliente e ri-eseguibile.
+"""Harvest aggregate selections into a tidy SQLite dataset.
 
-Si lancia da QUALUNQUE cartella:  python3 tools/esegui_harvest.py
-Tutti i percorsi sono calcolati dalla radice del repository, mai dalla
-cartella corrente."""
+Each selection is downloaded, parsed into tidy rows, and saved to SQLite.
+The process is resilient and can be rerun. Paths are resolved from the
+repository root, so the script can be launched from any working directory.
+"""
 
 import shutil
 import sys
@@ -14,33 +14,40 @@ from pathlib import Path
 
 RADICE = Path(__file__).resolve().parent.parent
 
-# I moduli del progetto vivono in due cartelle diverse (tools/ e backend/src/)
-# e si importano fra loro per nome. Senza queste due righe l'harvest muore
-# all'import con ModuleNotFoundError, da qualunque cartella lo lanci.
+# Project modules live in tools/ and backend/src/ and import one another by
+# name. Add both directories so imports work from any launch directory.
 for _cartella in (RADICE / "tools", RADICE / "backend" / "src"):
     if str(_cartella) not in sys.path:
         sys.path.insert(0, str(_cartella))
 
-from salva import apri_db, salva_righe  # noqa: E402  (dopo il fix di sys.path)
+from salva import apri_db, salva_righe  # noqa: E402 (after sys.path setup)
 from scarica import raccogli_scheda, scarica_scheda  # noqa: E402
 
 PAUSA_SECONDI = 1.0
 
-# IL database del sito, non una copia: e' il file che il frontend carica e che
-# il deploy pubblica. Quando questo percorso era relativo alla cartella
-# corrente, un harvest scriveva un file che nessuno leggeva e il sito
-# continuava a servire i dati vecchi, senza un solo messaggio d'errore.
+# This is the database loaded by the frontend and published by the deployment,
+# not a copy. Resolving it from the repository root prevents a run from
+# writing an unused file while the site continues serving stale data.
 DB_PATH = RADICE / "frontend" / "public" / "almalaurea.sqlite"
 
-# Le copie di sicurezza NON stanno in frontend/public: quella cartella viene
-# pubblicata per intero, ci finirebbero online.
+# Backups stay outside frontend/public because that directory is published in
+# its entirety.
 CARTELLA_BACKUP = RADICE / "backend" / "backup-db"
 
 
 def fai_copia_di_sicurezza(db_path):
-    """Copia il database prima di riscriverlo. Un harvest interrotto a meta'
-    lascia un misto di schede nuove e vecchie: con la copia si torna indietro.
-    Ritorna il percorso della copia, o None se non c'era nulla da copiare."""
+    """Back up the database before rewriting it.
+
+    An interrupted harvest can leave a mixture of new and old sheets; the
+    backup permits restoring the previous state. Return the backup path, or
+    ``None`` when there was no database to copy.
+
+    Args:
+        db_path: Database path to copy.
+
+    Returns:
+        The backup path, or ``None`` when the database does not exist.
+    """
     db_path = Path(db_path)
     if not db_path.exists():
         return None
@@ -52,12 +59,18 @@ def fai_copia_di_sicurezza(db_path):
 
 
 def percorso_leggibile(percorso):
-    """Il percorso accorciato rispetto alla radice del repository, quando ci
-    sta dentro; altrimenti il percorso cosi' com'e'.
+    """Return a repository-relative path when possible, otherwise the original.
 
-    Serve perche' --db accetta di proposito percorsi ASSOLUTI, anche fuori dal
-    repository: li' `relative_to()` alza ValueError e farebbe morire l'harvest
-    sulla riga di log, prima ancora di scaricare una sola scheda."""
+    The ``--db`` option intentionally accepts absolute paths outside the
+    repository; ``relative_to()`` raises ``ValueError`` for those paths, which
+    must not terminate the harvest while formatting a log message.
+
+    Args:
+        percorso: Path to format.
+
+    Returns:
+        A repository-relative or original path.
+    """
     percorso = Path(percorso)
     try:
         return percorso.relative_to(RADICE)
@@ -66,18 +79,36 @@ def percorso_leggibile(percorso):
 
 
 def etichetta_di(combo):
-    """Etichetta leggibile per i log, dall'involucro prodotto da harvest.py.
-    Include l'indagine: le due convivono nello stesso database, e un log che
-    non dice quale stai scaricando e' un log che non serve a niente."""
+    """Return a readable log label for a selection from harvest.py.
+
+    Include the survey because both surveys share one database and otherwise
+    the log would not identify which one is being downloaded.
+
+    Args:
+        combo: Selection dictionary produced by a harvest generator.
+
+    Returns:
+        A survey, level, and code label.
+    """
     indagine = combo["params"].get("CONFIG", "?")
     return f"{indagine}/{combo['livello']}={combo['codice']}"
 
 
 def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
-    """Scarica e salva tutte le combinazioni. Ogni combinazione e' l'involucro
-    prodotto da genera_combinazioni(): {'livello', 'codice', 'params'}, dove
-    'params' sono i parametri piatti da passare a visualizza.php.
-    Ritorna la lista dei falliti (combo, errore), cosi' puoi ri-eseguire solo quelli."""
+    """Download and save all selections.
+
+    Each selection has the ``livello``, ``codice``, and flat ``params`` wrapper
+    produced by ``genera_combinazioni()``. Return failed ``(selection, error)``
+    pairs so they can be rerun independently.
+
+    Args:
+        combinazioni: Iterable of selection dictionaries.
+        db_path: Destination SQLite database path.
+        pausa: Delay between requests in seconds.
+
+    Returns:
+        A list of failed ``(selection, error)`` pairs.
+    """
     copia = fai_copia_di_sicurezza(db_path)
     if copia:
         print(f"Copia di sicurezza del database: {percorso_leggibile(copia)}")
@@ -90,7 +121,7 @@ def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
 
     try:
         for n, combo in enumerate(combinazioni, start=1):
-            params = combo["params"]  # i parametri piatti per visualizza.php
+            params = combo["params"]  # Flat parameters for visualizza.php.
             etichetta = etichetta_di(combo)
             try:
                 html = scarica_scheda(params)
@@ -99,14 +130,13 @@ def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
                 print(f"[{n}/{totale}] OK  {etichetta}  ({n_salvate} righe)")
             except (
                 Exception
-            ) as e:  # rete, sito lento, struttura inattesa: non fermo tutto
+            ) as e:  # Isolate network, latency, and unexpected-structure failures.
                 print(f"[{n}/{totale}] FALLITO  {etichetta}  -> {e}")
                 falliti.append((combo, str(e)))
-            time.sleep(pausa)  # frequenza educata
+            time.sleep(pausa)  # Keep request frequency moderate.
 
-        # Rete di sicurezza su TUTTO il dataset: celle dal formato inatteso.
-        # Su 93 schede mai ispezionate, e' il modo di scoprire una sorpresa di
-        # struttura senza guardarle a mano.
+        # Inspect the whole dataset for unexpected cell formats. This provides
+        # coverage across 93 sheets without requiring manual inspection.
         rossi = conn.execute(
             "SELECT sezione, indicatore, valore_raw FROM dati "
             "WHERE nota = 'non_riconosciuto' LIMIT 10"
@@ -115,7 +145,7 @@ def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
             "SELECT COUNT(*) FROM dati WHERE nota = 'non_riconosciuto'"
         ).fetchone()[0]
     finally:
-        conn.close()  # chiude anche se interrompi con Ctrl-C: il committato resta
+        conn.close()  # Close even on interruption; committed data remains.
 
     print(f"\nFatto. {totale - len(falliti)}/{totale} schede salvate.")
     print(f"Valori non riconosciuti su tutto il dataset (attesi 0): {n_rossi}")
@@ -130,19 +160,26 @@ def esegui(combinazioni, db_path=DB_PATH, pausa=PAUSA_SECONDI):
 
 
 def scopri_corsi(atenei, gruppi, filtro, config="profilo", pausa=PAUSA_SECONDI):
-    """Chiede a solotendine.php quali corsi esistono davvero, ateneo per
-    ateneo, e tiene quelli il cui nome contiene `filtro`.
+    """Discover courses containing ``filtro`` at each university and group.
 
-    Ritorna {ateneo: [(gruppo, codice, nome), ...]}, pronto per genera_corsi().
+    Return ``{university: [(group, code, name), ...]}``, ready for
+    ``genera_corsi()``. An empty dropdown or HTTP error means that the
+    university has no course in that group; both cases are skipped without
+    stopping discovery. A course may appear in two groups with the same code;
+    for example, Bologna lists "ingegneria e scienze informatiche" in both
+    groups 10 and 12. Only its first occurrence is retained to avoid
+    downloading one sheet twice under different labels.
 
-    Un ateneo che non ha corsi in quel gruppo risponde con una tendina vuota,
-    o con un errore HTTP: sono entrambi "non ho niente qui", non guasti, e
-    non fermano la scoperta. Stessa lezione dell'incrocio ateneo x gruppo.
+    Args:
+        atenei: University codes to inspect.
+        gruppi: Disciplinary-group codes to inspect.
+        filtro: Case-insensitive substring required in a course name.
+        config: Survey identifier.
+        pausa: Delay between requests in seconds.
 
-    Lo stesso corso puo' comparire in DUE gruppi (Bologna elenca "ingegneria
-    e scienze informatiche" sia nel 10 che nel 12, con lo stesso codice):
-    si tiene la prima occorrenza, cosi' non si scarica due volte la stessa
-    scheda sotto due etichette diverse."""
+    Returns:
+        A mapping from university codes to course tuples.
+    """
     from harvest import params_tendine
     from scarica import leggi_tendine
 
@@ -152,7 +189,7 @@ def scopri_corsi(atenei, gruppi, filtro, config="profilo", pausa=PAUSA_SECONDI):
         for gruppo in gruppi:
             try:
                 tendine = leggi_tendine(params_tendine(ateneo, gruppo, config=config))
-            except Exception as e:  # 400/500 = combinazione inesistente
+            except Exception as e:  # HTTP 400/500 means the combination is absent.
                 print(f"  {ateneo}/gr.{gruppo}: tendine non disponibili ({e.__class__.__name__})")
                 time.sleep(pausa)
                 continue
@@ -166,21 +203,16 @@ def scopri_corsi(atenei, gruppi, filtro, config="profilo", pausa=PAUSA_SECONDI):
 
 
 if __name__ == "__main__":
-    # Le 93 selezioni aggregate vengono da backend/src/harvest.py.
+    # Aggregate selections are defined in backend/src/harvest.py.
     from harvest import INDAGINI, genera_combinazioni, genera_corsi, genera_incroci
     from harvest import ATENEI_INCROCIO
 
-    # Quale indagine scaricare. Le due convivono nello stesso database: la
-    # colonna `indagine` le tiene separate, quindi scaricarne una non tocca
-    # le righe dell'altra.
-    #   python3 tools/esegui_harvest.py              -> profilo (default)
-    #   python3 tools/esegui_harvest.py occupazione  -> esiti occupazionali
+    # Select a survey. Both share one database, while ``indagine`` keeps their
+    # rows separate, so downloading one does not alter the other.
     #
-    # --incrocio scarica invece le schede ateneo x gruppo (informatica e
-    # ingegneria nei singoli atenei), che le 93 aggregate non contengono.
-    # Va SEMPRE accompagnato da --db: quelle righe sono un'indagine a parte,
-    # non devono finire nel database che il sito pubblica finche' non decidiamo
-    # che ci vanno.
+    # --incrocio downloads university-by-group sheets not present in the 93
+    # aggregates. It must be paired with --db because these analytical rows
+    # belong in a separate database rather than the published one.
     #   python3 tools/esegui_harvest.py occupazione --incrocio \
     #       --db backend/backup-db/incrocio.sqlite
     argomenti = sys.argv[1:]
@@ -188,15 +220,15 @@ if __name__ == "__main__":
     if incrocio:
         argomenti.remove("--incrocio")
 
-    # --corsi: livello CORSO (Fase 4). Scopre i corsi con solotendine.php e
-    # scarica solo quelli il cui nome contiene --filtro. Come --incrocio,
-    # pretende --db: sono righe di analisi, non un prodotto del sito.
+    # --corsi discovers course-level options with solotendine.php and downloads
+    # only names containing --filtro. Like --incrocio, it requires --db because
+    # these are analytical rows rather than a published site product.
     corsi = "--corsi" in argomenti
     if corsi:
         argomenti.remove("--corsi")
 
     filtro = "informatic"
-    gruppi_corsi = ["12"]  # ingegneria industriale e dell'informazione
+    gruppi_corsi = ["12"]  # Industrial and Information Engineering.
     for opzione, destinazione in (("--filtro", "filtro"), ("--gruppi", "gruppi")):
         if opzione in argomenti:
             i = argomenti.index(opzione)
@@ -219,8 +251,7 @@ if __name__ == "__main__":
         db_path.parent.mkdir(parents=True, exist_ok=True)
         del argomenti[i : i + 2]
 
-    # Una svista qui riscriverebbe il database del sito con dati parziali, e
-    # sarebbe una riga di log in mezzo a settantasei. Meglio fermarsi prima.
+    # Prevent partial analytical data from overwriting the site's database.
     if (incrocio or corsi) and db_path == DB_PATH:
         quale = "--incrocio" if incrocio else "--corsi"
         sys.exit(

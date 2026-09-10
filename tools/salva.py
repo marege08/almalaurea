@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Salvataggio del dataset tidy su SQLite.
-Scrittura idempotente: rilanciare l'harvester riscrive le righe gia' presenti,
-non le duplica (grazie alla chiave primaria composita + INSERT OR REPLACE)."""
+"""Save the tidy dataset to SQLite.
+
+Writes are idempotent: rerunning the harvester replaces existing rows instead
+of duplicating them, using the composite primary key and INSERT OR REPLACE.
+"""
 
 import sqlite3
 
-# Ordine delle colonne: lo stesso usato per l'INSERT, cosi' resta una sola
-# fonte di verita' sull'ordine.
+# Keep the column order used by INSERT as the single source of truth.
 COLONNE = [
     "anno",
     "indagine",
@@ -26,6 +27,17 @@ COLONNE = [
     "numero_compilatori",
 ]
 
+# `indagine` identifies the graduate profile survey or employment outcomes survey.
+# `definizione` is '' for the graduate profile survey, and otherwise takes
+# 'restrittiva', 'ampia', 'condivisa', or 'sconosciuta'. Include 'condivisa'
+# in every query because those rows apply to both employment definitions.
+# `tipo_corso` is '' for university- or group-level sheets.
+# `ateneo` is '' on a group sheet; `gruppo` is '' on a university sheet.
+# `corso` is '' on aggregate sheets and populated on course sheets.
+# `categoria` is '' when an indicator has no category.
+# `valore` is NULL when a cell contains a special symbol.
+# `nota` records 'oscurato_meno_di_5', 'zero_casi', or 'non_disponibile'.
+# `valore_raw` preserves the exact cell text supplied by AlmaLaurea.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS dati (
     anno               TEXT    NOT NULL,
@@ -63,17 +75,24 @@ CREATE TABLE IF NOT EXISTS dati (
 
 
 def apri_db(path):
-    """Apre (o crea) il database e assicura lo schema. Ritorna la connessione."""
+    """Open or create a database, ensure its schema, and return the connection.
+
+    Args:
+        path: SQLite database path.
+
+    Returns:
+        An open SQLite connection.
+    """
     conn = sqlite3.connect(path)
     conn.execute(SCHEMA)
     conn.commit()
     return conn
 
 
-# Le righe di UNA scheda condividono questi campi: sono l'identita' della scheda.
-# NOTA: `definizione` NON va qui, pur essendo nella chiave primaria. Una singola
-# scheda 'occupazione' porta righe di ENTRAMBE le definizioni: metterla fra le
-# chiavi-scheda farebbe cancellare solo meta' della scheda a ogni ri-esecuzione.
+# Rows from one sheet share these fields, which identify the sheet.
+# ``definizione`` is intentionally excluded despite being part of the primary
+# key: an occupation sheet contains both definitions, and including it here
+# would delete only half the sheet on rerun.
 CHIAVI_SCHEDA = [
     "anno",
     "indagine",
@@ -86,15 +105,23 @@ CHIAVI_SCHEDA = [
 
 
 def salva_righe(conn, righe):
-    """Inserisce le righe di UNA scheda, sostituendola per intero.
-    Prima cancella le righe gia' presenti per quella scheda, poi reinserisce:
-    cosi' ri-eseguire rimuove anche le righe che non devono piu' esistere
-    (es. spazzatura di una versione buggata del parser), non solo aggiorna.
-    Ritorna quante righe sono state scritte."""
+    """Replace one sheet's rows and return the number of rows written.
+
+    Existing rows for the sheet are deleted before insertion, so rerunning
+    also removes rows that should no longer exist, such as parser artefacts,
+    rather than merely updating matching rows.
+
+    Args:
+        conn: Open SQLite connection.
+        righe: Tidy rows belonging to one sheet.
+
+    Returns:
+        The number of rows written, or zero for an empty input.
+    """
     if not righe:
         return 0
 
-    # Tutte le righe condividono l'identita' della scheda: la prendo dalla prima.
+    # All rows share the sheet identity, which can be read from the first row.
     ident = righe[0]
     where = " AND ".join(f"{c} = ?" for c in CHIAVI_SCHEDA)
     conn.execute(

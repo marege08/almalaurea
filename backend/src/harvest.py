@@ -1,11 +1,9 @@
-# Questo modulo decide COSA scaricare. Il download vero (URL, User-Agent,
-# parsing) vive in tools/scarica.py: qui dentro non parte nessuna richiesta.
-#
-# Nota storica: c'erano una costante URL che puntava a solotendine.php e uno
-# HEADERS accanto, e non li usava nessuno — il download e' sempre passato da
-# VISUALIZZA_URL in scarica.py. Sono due endpoint diversi (solotendine.php dice
-# quali opzioni sono valide, visualizza.php da' i numeri), e trovarli qui
-# faceva credere che l'harvester interrogasse il primo. Rimossi.
+"""Define the selections and parameter combinations harvested from AlmaLaurea.
+
+Network access, request headers, and HTML parsing are implemented in
+``tools/scarica.py``. This module only constructs selections and flat query
+parameters.
+"""
 
 ATENEI = [
     "70002",
@@ -86,7 +84,7 @@ ATENEI = [
     "70036",
     "70037",
     "70040",
-]  # 78 atenei
+]  # 78 universities.
 GRUPPI = [
     "13",
     "11",
@@ -103,23 +101,22 @@ GRUPPI = [
     "6",
     "9",
     "15",
-]  # 15 gruppi
+]  # 15 disciplinary groups.
 
 ANNO = "2025"
 
-# Le due indagini AlmaLaurea. Stesse 93 schede aggregate, stesso endpoint:
-# cambia solo il valore di CONFIG.
-#   profilo     -> "Percorsi di laurea": com'e' andata l'universita'.
-#   occupazione -> "Esiti occupazionali della laurea": cosa succede dopo.
+# The graduate profile survey and employment outcomes survey use the same 93
+# aggregate selections and endpoint; only `CONFIG` changes. `profilo` covers
+# degree paths, while `occupazione` covers outcomes after graduation.
 INDAGINI = ("profilo", "occupazione")
-CONFIG = "profilo"  # default storico
+CONFIG = "profilo"  # Default survey.
 
-# Parametri "di base": tutto su 'tutti', nessuna disaggregazione.
-# Da qui partiamo e accendiamo UNA casella per volta a seconda del livello.
+# Base parameters select ``tutti`` without disaggregation. Each generator
+# starts here and enables one selection according to its requested level.
 #
-# pa / cs_univ / cs_facoa / cs_corsb non sono decorazione: senza di loro
-# CONFIG=occupazione risponde HTTP 400. Set canonico, copiato dalla query
-# string che manda il sito stesso (vedi il commento in tools/scarica.py).
+# pa, cs_univ, cs_facoa, and cs_corsb are required: without them,
+# CONFIG=occupazione returns HTTP 400. The set matches the query string sent
+# by the website itself (see the corresponding comment in tools/scarica.py).
 PARAMS_BASE = {
     "anno": ANNO,
     "corstipo": "tutti",
@@ -145,21 +142,34 @@ PARAMS_BASE = {
 
 
 def genera_combinazioni(config=CONFIG, anno=ANNO):
-    """Restituisce la lista delle schede da scaricare per UNA indagine.
-    Ogni elemento è un dict: {'livello':..., 'codice':..., 'params':...}.
-    QUESTO è l'unico punto che cambia quando aggiungeremo i corsi."""
+    """Return the selections to download for one survey.
+
+    Each element is a dictionary containing ``livello``, ``codice``, and
+    ``params``. Course-level selections use a separate generator.
+
+    Args:
+        config: Survey identifier.
+        anno: Survey year.
+
+    Returns:
+        A list of selection dictionaries.
+
+    Raises:
+        ValueError: If ``config`` is not a supported survey.
+    """
     if config not in INDAGINI:
         raise ValueError(f"indagine sconosciuta: {config!r} (attese: {INDAGINI})")
 
     base = dict(PARAMS_BASE, CONFIG=config, anno=anno)
     combinazioni = []
 
-    # Livello ATENEO: accendo 'ateneo', lascio il resto su 'tutti'
+    # University level enables ``ateneo`` and leaves all other selections at
+    # ``tutti``.
     for cod in ATENEI:
         params = dict(base, ateneo=cod)
         combinazioni.append({"livello": "ateneo", "codice": cod, "params": params})
 
-    # Livello GRUPPO: accendo 'gruppo', ateneo resta 'tutti'
+    # Group level enables ``gruppo`` while ``ateneo`` remains ``tutti``.
     for cod in GRUPPI:
         params = dict(base, gruppo=cod)
         combinazioni.append({"livello": "gruppo", "codice": cod, "params": params})
@@ -167,69 +177,76 @@ def genera_combinazioni(config=CONFIG, anno=ANNO):
     return combinazioni
 
 
-# --------------------------------------------------------------------------
-# INCROCIO ateneo x gruppo
+# Cross-selections combine a university and disciplinary group in one request.
+# The 93 aggregate selections enable only one of the two: a university
+# selection mixes all disciplines, while a group selection covers all of Italy.
+# Neither can answer a question about one group at one university.
 #
-# Le 93 schede di genera_combinazioni() accendono UNA casella per volta:
-# o l'ateneo (e allora il gruppo e' 'tutti', tutte le discipline mescolate)
-# o il gruppo (e allora l'ateneo e' 'tutti', tutta Italia). Nessuna delle due
-# risponde a "come va Informatica a Pisa": la prima annega informatica dentro
-# medicina e lettere, la seconda non distingue gli atenei.
+# visualizza.php accepts flat parameters, so enabling both selections requires
+# no new syntax. raccogli_scheda() and CHIAVI_SCHEDA in salva.py already retain
+# both values, allowing a cross-selection to coexist without collisions.
 #
-# visualizza.php prende parametri piatti, quindi accendere ateneo E gruppo
-# insieme e' legale: nessuna sintassi nuova, si passano tutti e due.
-# raccogli_scheda() copia gia' entrambi nelle righe, e CHIAVI_SCHEDA in
-# salva.py li contiene entrambi: per il database una scheda incrociata e'
-# una scheda a se', non collide con niente di esistente.
-#
-# NON e' la Fase 4 (livello-corso, 4.000 corsi, ~483 MB). Qui il conto e'
-# atenei x gruppi x indagini, e resta piccolo di proposito.
+# This is separate from course-level harvesting, which covers about 4,000
+# courses and approximately 483 MB. The cross-selection dataset remains small
+# because it contains universities multiplied by groups and surveys.
 
-# Rosa scelta il 30 ago 2026 con Mare: parte da Roma (dove vive: pendolare =
-# zero affitto), piu' gli atenei del resto d'Italia dove informatica e
-# ingegneria sono serie e il costo della vita e' sostenibile. Milano e Trento
-# sono fuori per il costo degli affitti; il Politecnico di Milano non e'
-# consorziato AlmaLaurea e infatti non compare in ATENEI.
+# Fixed sample of universities for a targeted university-by-group comparison
+# in computing and engineering. The Polytechnic University of Milan is not an
+# AlmaLaurea member and therefore does not appear in ATENEI.
 ATENEI_INCROCIO = [
-    "70026",  # Roma Sapienza
-    "70027",  # Roma Tor Vergata
-    "70117",  # Roma Tre
-    "70032",  # Torino Politecnico
-    "70031",  # Torino
-    "70003",  # Bologna
-    "70019",  # Padova
-    "70024",  # Pisa
-    "70010",  # Firenze
-    "70011",  # Genova
-    "70022",  # Pavia
-    "70021",  # Parma
-    "70017",  # Modena e Reggio Emilia
-    "70023",  # Perugia
-    "70055",  # L'Aquila
-    "70018",  # Napoli Federico II
-    "70028",  # Salerno
-    "70048",  # Bari Politecnico
-    "70008",  # Catania
-]  # 19 atenei
+    "70026",  # Sapienza University of Rome
+    "70027",  # University of Rome Tor Vergata
+    "70117",  # Roma Tre University
+    "70032",  # Polytechnic University of Turin
+    "70031",  # University of Turin
+    "70003",  # University of Bologna
+    "70019",  # University of Padua
+    "70024",  # University of Pisa
+    "70010",  # University of Florence
+    "70011",  # University of Genoa
+    "70022",  # University of Pavia
+    "70021",  # University of Parma
+    "70017",  # University of Modena and Reggio Emilia
+    "70023",  # University of Perugia
+    "70055",  # University of L'Aquila
+    "70018",  # University of Naples Federico II
+    "70028",  # University of Salerno
+    "70048",  # Polytechnic University of Bari
+    "70008",  # University of Catania
+]  # 19 universities.
 
-# 10 = Informatica e Tecnologie ICT, 12 = Ingegneria industriale e
-# dell'informazione. Sono i due gruppi fra cui si decide, e la robotica sta
-# a cavallo dei due (meccatronica e automazione stanno nel 12).
+# Select group 10 (Computing and ICT) and group 12 (Industrial and Information
+# Engineering).
 GRUPPI_INCROCIO = ["10", "12"]
 
 
 def genera_incroci(atenei=None, gruppi=None, config=CONFIG, anno=ANNO):
-    """Le schede ateneo x gruppo per UNA indagine: accende ateneo E gruppo
-    nella stessa richiesta. Stesso involucro di genera_combinazioni()
-    ({'livello', 'codice', 'params'}), cosi' esegui() non distingue i due casi."""
+    """Return university-by-group selections for one survey.
+
+    Both university and group are enabled in each request. The returned
+    dictionaries have the same wrapper as ``genera_combinazioni()`` so callers
+    can process both forms uniformly.
+
+    Args:
+        atenei: Optional university codes.
+        gruppi: Optional disciplinary-group codes.
+        config: Survey identifier.
+        anno: Survey year.
+
+    Returns:
+        A list of university-by-group selection dictionaries.
+
+    Raises:
+        ValueError: If a survey, university, or group code is unsupported.
+    """
     if config not in INDAGINI:
         raise ValueError(f"indagine sconosciuta: {config!r} (attese: {INDAGINI})")
 
     atenei = list(ATENEI_INCROCIO if atenei is None else atenei)
     gruppi = list(GRUPPI_INCROCIO if gruppi is None else gruppi)
 
-    # Sbaglia rumorosamente invece di scaricare 76 schede sbagliate: un codice
-    # inventato torna comunque una pagina, solo con i numeri di qualcun altro.
+    # Reject invalid codes before downloading: the endpoint can return a page
+    # for an invented code containing another selection's figures.
     if ignoti := [a for a in atenei if a not in ATENEI]:
         raise ValueError(f"codici ateneo non nella lista ufficiale: {ignoti}")
     if ignoti := [g for g in gruppi if g not in GRUPPI]:
@@ -247,31 +264,39 @@ def genera_incroci(atenei=None, gruppi=None, config=CONFIG, anno=ANNO):
     ]
 
 
-# --------------------------------------------------------------------------
-# LIVELLO CORSO (Fase 4)
+# Course-level selections use ``postcorso`` and ``corstipo``. The parser stores
+# these in ``corso`` and ``tipo_corso``, both of which are part of the primary
+# key, so course rows coexist with aggregate rows without collisions.
 #
-# Il livello che il commento di genera_combinazioni() prometteva da sempre
-# ("QUESTO e' l'unico punto che cambia quando aggiungeremo i corsi").
-#
-# Perche' non ha rotto niente: il parser di scarica.py copia gia' 'postcorso'
-# nella colonna `corso` e 'corstipo' in `tipo_corso`, ed entrambe stanno nella
-# chiave primaria. Una scheda-corso ha tipo_corso='L' e corso valorizzato,
-# dove gli aggregati hanno ''. Non collidono: convivono nella stessa tabella.
-#
-# I codici corso NON si inventano e non si scrivono a mano: sono stringhe di
-# 16 cifre che si leggono da solotendine.php con scarica.leggi_tendine().
-# Vedi li' le due condizioni che sbloccano le tendine (pa e corstipo).
+# Course codes are read from solotendine.php through scarica.leggi_tendine();
+# they are not invented or entered manually. That endpoint requires both
+# ``pa`` and ``corstipo`` to expose the course options.
 
-# 'L' = laurea di primo livello. E' il valore che, insieme a pa=<ateneo>,
-# fa comparire i corsi nelle tendine. Non confonderlo con livello='1'.
+# ``L`` denotes a first-cycle degree. Together with ``pa=<university>``, it
+# makes courses appear in the endpoint's option lists; it is distinct from
+# ``livello='1'``.
 CORSTIPO_TRIENNALE = "L"
 
 
 def params_tendine(ateneo, gruppo, config=CONFIG, anno=ANNO, corstipo=CORSTIPO_TRIENNALE):
-    """I parametri da passare a scarica.leggi_tendine() per farsi elencare i
-    corsi di UN ateneo dentro UN gruppo disciplinare. 'pa' e 'ateneo' vanno
-    entrambi valorizzati con lo stesso codice: il primo e' il punto di
-    accesso, il secondo il filtro."""
+    """Build parameters for listing courses at one university and group.
+
+    ``pa`` and ``ateneo`` both use the university code: the former is the
+    endpoint access context and the latter is the selection filter.
+
+    Args:
+        ateneo: University code.
+        gruppo: Disciplinary-group code.
+        config: Survey identifier.
+        anno: Survey year.
+        corstipo: Course type code.
+
+    Returns:
+        A flat parameter dictionary for ``leggi_tendine()``.
+
+    Raises:
+        ValueError: If the university or group code is unsupported.
+    """
     if ateneo not in ATENEI:
         raise ValueError(f"codice ateneo non nella lista ufficiale: {ateneo!r}")
     if gruppo not in GRUPPI:
@@ -288,11 +313,24 @@ def params_tendine(ateneo, gruppo, config=CONFIG, anno=ANNO, corstipo=CORSTIPO_T
 
 
 def genera_corsi(corsi_per_ateneo, config=CONFIG, anno=ANNO, corstipo=CORSTIPO_TRIENNALE):
-    """Le schede a livello di CORSO per UNA indagine.
+    """Return course-level selections for one survey.
 
-    corsi_per_ateneo: {codice_ateneo: [(gruppo, codice_corso, nome), ...]},
-    cosi' come lo restituisce la scoperta fatta con leggi_tendine().
-    Stesso involucro delle altre generatrici, cosi' esegui() non distingue."""
+    ``corsi_per_ateneo`` maps university codes to ``(group, course code,
+    name)`` tuples as returned by ``leggi_tendine()``. The result uses the
+    same wrapper as the other generators so callers can process it uniformly.
+
+    Args:
+        corsi_per_ateneo: Course tuples grouped by university code.
+        config: Survey identifier.
+        anno: Survey year.
+        corstipo: Course type code.
+
+    Returns:
+        A list of course-level selection dictionaries.
+
+    Raises:
+        ValueError: If a survey, university, or group code is unsupported.
+    """
     if config not in INDAGINI:
         raise ValueError(f"indagine sconosciuta: {config!r} (attese: {INDAGINI})")
 

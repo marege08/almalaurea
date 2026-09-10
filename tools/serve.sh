@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# serve.sh — avvia un server statico locale per vedere l'app nel browser.
+# serve.sh — start a local static server for viewing the app in a browser.
 #
-# L'app usa moduli ES e fa fetch del database: NON funziona aprendo
-# index.html con doppio click (file://). Serve un server http vero,
-# anche solo locale. Questo lo avvia sulla cartella pubblicata.
+# The app uses ES modules and fetches the database: it does NOT work when
+# index.html is opened by double-clicking (file://). A real HTTP server is
+# required, even if it is local. This starts one for the published directory.
 #
-# Uso:  ./tools/serve.sh          (porta 8000)
-#       ./tools/serve.sh 8080     (porta a scelta)
-# Poi apri l'indirizzo stampato nel browser. Ctrl+C per fermarlo.
+# Usage:  ./tools/serve.sh          (port 8000)
+#         ./tools/serve.sh 8080     (custom port)
+# Then open the printed address in a browser. Press Ctrl+C to stop it.
 set -euo pipefail
 PORTA="${1:-8000}"
 CARTELLA_PROGETTO="$(cd "$(dirname "$0")/.." && pwd)"

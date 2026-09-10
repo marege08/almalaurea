@@ -1,21 +1,33 @@
 # -*- coding: utf-8 -*-
-"""Interpretazione di una cella-valore di AlmaLaurea.
-Logica pura (nessuna rete, nessun HTML): facile da testare in isolamento.
-Regole: note metodologiche §4.3 (simboli) + formato numerico italiano."""
+"""Interpret an AlmaLaurea value cell.
 
-# I simboli convenzionali NON sono "mancante" generico: ognuno ha un significato.
+This module contains pure logic without network or HTML dependencies, making
+the parsing rules straightforward to test in isolation. The rules follow
+AlmaLaurea's methodological notes, section 4.3, for symbols and Italian
+numeric formatting.
+"""
+
+# Conventional symbols are not generic missing values; each has a distinct meaning.
 SIMBOLI = {
-    "*": "oscurato_meno_di_5",  # collettivo < 5 unita': statistica oscurata = avviso campione piccolo
-    "-": "zero_casi",  # fenomeno rilevato ma zero casi
-    "/": "non_disponibile",  # dato non disponibile / non confrontabile (serie storiche)
+    "*": "oscurato_meno_di_5",  # Groups below five units have suppressed statistics.
+    "-": "zero_casi",  # The phenomenon was recorded, but there were zero cases.
+    "/": "non_disponibile",  # The data is unavailable or not comparable in a time series.
 }
 
 
 def pulisci_valore(grezzo):
-    """Interpreta una cella-valore. Ritorna (valore, nota):
-       - valore: float se e' un numero, altrimenti None
-       - nota:   significato del simbolo/anomalia, altrimenti None
-    Chi chiama conserva comunque la stringa grezza (tracciabilita')."""
+    """Interpret a value cell and return its parsed value and annotation.
+
+    The value is a float for numeric input and otherwise ``None``. The
+    annotation records a symbol or parsing anomaly and is otherwise ``None``.
+    Callers retain the original string for traceability.
+
+    Args:
+        grezzo: Raw cell text, or a falsey value for an empty cell.
+
+    Returns:
+        A ``(value, annotation)`` tuple.
+    """
     testo = (grezzo or "").strip()
 
     if testo in SIMBOLI:
@@ -23,13 +35,14 @@ def pulisci_valore(grezzo):
     if testo == "":
         return None, "vuoto"
 
-    # Formato italiano: '.' = separatore migliaia, ',' = separatore decimali.
-    # Prima tolgo i punti delle migliaia, poi virgola -> punto.
-    # (Cosi' '7.401' -> 7401 e '35,2' -> 35.2, entrambi corretti.)
+    # Italian format uses '.' for thousands and ',' for decimal separation.
+    # Remove thousands separators first, then convert the decimal separator.
+    # Thus '7.401' becomes 7401 and '35,2' becomes 35.2.
     normalizzato = testo.replace(".", "").replace(",", ".")
     try:
         return float(normalizzato), None
     except ValueError:
-        # qualcosa di inatteso: non lo perdo in silenzio, lo segnalo.
-        # (Se un giorno comparisse '35,2%', finirebbe qui: aggiungeremmo uno strip('%').)
+        # Preserve unexpected input as an explicit annotation instead of
+        # silently discarding it. A value such as '35,2%' would reach this
+        # branch until percent-sign handling is deliberately added.
         return None, "non_riconosciuto"

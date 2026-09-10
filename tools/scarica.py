@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Scarica una scheda da visualizza.php e la monta in righe tidy complete."""
+"""Download an AlmaLaurea sheet from visualizza.php and build tidy rows."""
 
 import re
 
@@ -13,22 +13,22 @@ VISUALIZZA_URL = (
 )
 HEADERS = {"User-Agent": "progetto-orientamento-laurea"}
 
-# L'ALTRO endpoint. visualizza.php da' i NUMERI; solotendine.php dice quali
-# OPZIONI sono valide — ed e' l'unico modo di sapere quali corsi esistono
-# davvero in un ateneo, invece di indovinare codici.
+# The other endpoint: visualizza.php returns figures, while solotendine.php
+# lists valid options. It is the only reliable way to discover which courses
+# exist at a university instead of guessing course codes.
 SOLOTENDINE_URL = (
     "https://www2.almalaurea.it/cgi-php/universita/statistiche/solotendine.php"
 )
 
-# Una scheda ateneo che conosci: Bari (70002), profilo, anno singolo.
-# Livello "ateneo": ateneo acceso, tutto il resto su 'tutti'.
+# A known university sheet: Bari (70002), graduate profile survey, single year.
+# At university level, ``ateneo`` is enabled and all other selections are
+# ``tutti``.
 #
-# I quattro parametri pa / cs_univ / cs_facoa / cs_corsb sembrano superflui,
-# perche' l'indagine 'profilo' risponde anche senza. NON lo sono: con
-# CONFIG=occupazione la stessa richiesta senza di loro torna HTTP 400. Questo
-# set e' copiato dalla query string che manda il sito stesso, trovata in un
-# commento HTML dentro docs/solotendine.php: e' il contratto vero, non
-# ricostruito a memoria.
+# The four parameters pa, cs_univ, cs_facoa, and cs_corsb appear unnecessary
+# because the graduate profile survey also responds without them. They are required for
+# `CONFIG=occupazione`, where omitting them returns HTTP 400. This set is copied
+# from the query string that the AlmaLaurea website itself sends; it is the
+# observed endpoint contract.
 PARAMS = {
     "anno": "2025",
     "corstipo": "tutti",
@@ -52,21 +52,31 @@ PARAMS = {
     "CONFIG": "profilo",
 }
 
-# Le tabelle-dato hanno id 'datiN' e class 'datiprofiloM'.
+# Data tables have an id of ``datiN`` and a class of ``datiprofiloM``.
 #
-# Nelle schede 'occupazione' le stesse sezioni compaiono DUE volte, una per
-# ciascuna definizione ufficiale di "occupato", con sezione/categoria/
-# indicatore identici. L'unico segno che le distingue e' quel numero di
-# classe: il secondo blocco e' lo stesso indice +100. Confermato dal
-# JavaScript della pagina (swapBlocchi), che nasconde .datiprofilo4..11 e
-# mostra .datiprofilo104..114 quando la definizione attiva e' quella ampia.
-# Sono due numeri ufficiali diversi, non un dettaglio di visualizzazione.
+# In employment outcomes survey sheets, the same sections appear twice, once for each official
+# definition of "employed", with identical section, category, and indicator.
+# The class number distinguishes them: the second block has the first index
+# plus 100. The page JavaScript (swapBlocchi) hides .datiprofilo4..11 and
+# shows .datiprofilo104..114 for the broad definition. These are two distinct
+# official figures, not merely a display detail.
 RE_ID_TABELLA = re.compile(r"^dati(\d+)$")
 RE_CLASSE_BLOCCO = re.compile(r"^datiprofilo(\d+)$")
 SOGLIA_BLOCCO_AMPIA = 100
 
 
 def scarica_scheda(params):
+    """Download one sheet and return its HTML response body.
+
+    Args:
+        params: Flat query parameters accepted by visualizza.php.
+
+    Returns:
+        The response body as HTML text.
+
+    Raises:
+        requests.RequestException: If the request fails or returns an error.
+    """
     risposta = requests.get(VISUALIZZA_URL, params=params, headers=HEADERS, timeout=30)
     risposta.raise_for_status()
     return risposta.text
@@ -74,29 +84,26 @@ def scarica_scheda(params):
 
 
 def leggi_tendine(params):
-    """Le opzioni valide dei menu a tendina per UNA selezione, da
-    solotendine.php. Ritorna {nome_tendina: [(valore, etichetta), ...]},
-    con la voce 'tutti' scartata: serve all'interfaccia del sito, non e' una
-    scelta reale.
+    """Return valid dropdown options for one selection from solotendine.php.
 
-    DUE CONDIZIONI, scoperte il 30 ago 2026 provando, non deducendo. Le
-    tendine di 'classe' e 'postcorso' restano VUOTE finche' non valgono
-    entrambe:
+    The result maps each dropdown name to ``(value, label)`` pairs and omits
+    ``tutti``, which is an interface placeholder rather than a real choice.
+    The ``classe`` and ``postcorso`` lists remain empty unless ``pa`` contains
+    the university code and ``corstipo`` is enabled with ``L``. ``livello=1``
+    alone is insufficient because it filters data rather than identifying the
+    course type. ``pa`` is the access-point value carried by the website form
+    field ``<input type="hidden" name="pa">``; without it, the site does not
+    know which university's courses to list. The ``pa`` and ``corstipo``
+    requirements are observed from the endpoint's form behaviour.
 
-      1. 'pa' deve essere il codice dell'ateneo, non 'tutti'. Nel form vero
-         del sito e' un input nascosto (`<input type="hidden" name="pa"
-         value="70002">`): e' il "punto di accesso", e senza di lui il sito
-         non sa di quale ateneo elencare i corsi.
-      2. 'corstipo' deve essere acceso ('L' = laurea di primo livello).
-         **'livello' NON basta**: livello=1 lascia le tendine vuote, perche'
-         e' un filtro sui DATI ("laurea di primo livello" come collettivo),
-         non il tipo di corso da elencare. E' esattamente la confusione su
-         cui si arrovellava il paragrafo A.3 di GestioneDatabase.md: non
-         c'era nessuna incongruenza fra i due endpoint, mancava corstipo.
+    Args:
+        params: Flat query parameters accepted by solotendine.php.
 
-    Nota storica: GestioneDatabase.md dava questa funzione per gia' scritta
-    e funzionante ("leggi_tendine() che hai scritto"). Non esisteva: zero
-    occorrenze in tutto il repository. Questa e' la prima versione vera.
+    Returns:
+        A mapping from dropdown names to ``(value, label)`` pairs.
+
+    Raises:
+        requests.RequestException: If the request fails or returns an error.
     """
     risposta = requests.get(
         SOLOTENDINE_URL, params=params, headers=HEADERS, timeout=30
@@ -118,18 +125,35 @@ def leggi_tendine(params):
 
 
 def e_intestazione_colonna(testo):
-    """Vero se la cella e' l'intestazione di colonna 'Collettivo selezionato',
-    con o senza un richiamo a nota tipo '(1)' attaccato. Usato come marcatore
-    di struttura: niente che la contenga e' un dato."""
+    """Return whether a cell is the selected-collective column header.
+
+    The header may include an attached note marker such as ``(1)``. It is a
+    structural marker, so a cell containing it is not data.
+
+    Args:
+        testo: Normalized cell text.
+
+    Returns:
+        ``True`` when the text is the selected-collective header.
+    """
     return testo.startswith("Collettivoselezionato")
 
 
 def tabelle_dato(zuppa):
-    """Tutte le tabelle-dato della scheda, in ordine, ESCLUSA dati1 (che e' la
-    numerosita', non dati). Scoperte dal documento invece che assunte: 'profilo'
-    ne ha 11, 'occupazione' 16. Il vecchio range(2, 12) cablato perdeva le
-    tabelle oltre l'undicesima senza dire niente — su una scheda occupazione
-    faceva sparire 67 righe su 177."""
+    """Return all data tables in document order, excluding ``dati1``.
+
+    ``dati1`` contains counts rather than indicators. The tables are discovered
+    from the document: graduate profile survey sheets contain 11 and
+    employment outcomes survey sheets 16.
+    A fixed ``range(2, 12)`` would silently omit tables beyond the eleventh;
+    on an employment outcomes survey sheet, it would omit 67 of 177 rows.
+
+    Args:
+        zuppa: Parsed sheet document.
+
+    Returns:
+        Data tables in document order.
+    """
     trovate = []
     for tabella in zuppa.find_all("table", id=True):
         m = RE_ID_TABELLA.match(tabella["id"])
@@ -140,9 +164,17 @@ def tabelle_dato(zuppa):
 
 
 def indice_blocco(tabella):
-    """Il numero N della classe 'datiprofiloN' di questa tabella, o None.
-    E' la classe a distinguere i blocchi, non l'id: gli id (dati2, dati3, ...)
-    sono un contatore progressivo che non dice niente su chi e' chi."""
+    """Return this table's ``datiprofiloN`` class number, or ``None``.
+
+    The class distinguishes blocks; ids such as ``dati2`` and ``dati3`` are
+    only progressive counters and do not identify the block's meaning.
+
+    Args:
+        tabella: Parsed data table.
+
+    Returns:
+        The block index, or ``None`` when no matching class is present.
+    """
     for classe in tabella.get("class", []):
         m = RE_CLASSE_BLOCCO.match(classe)
         if m:
@@ -151,9 +183,17 @@ def indice_blocco(tabella):
 
 
 def indici_blocco(zuppa):
-    """Tutti gli indici 'datiprofiloN' presenti nella scheda. Serve a sapere
-    se un blocco ha il suo gemello: e' quello che distingue un blocco specifico
-    di una definizione da un blocco condiviso."""
+    """Return all ``datiprofiloN`` indices present in the sheet.
+
+    The set identifies whether a block has a paired counterpart and therefore
+    distinguishes definition-specific blocks from shared blocks.
+
+    Args:
+        zuppa: Parsed sheet document.
+
+    Returns:
+        The set of present block indices.
+    """
     return {
         i
         for tabella in zuppa.find_all("table", id=True)
@@ -162,24 +202,31 @@ def indici_blocco(zuppa):
 
 
 def definizione_di(tabella, indagine, indici_presenti):
-    """Quale definizione di "occupato" descrive questa tabella.
+    """Return which employment definition describes a table.
 
-    '' per l'indagine 'profilo', dove il doppione non esiste.
-    'sconosciuta' se la classe attesa non c'e': un valore che NON collide con
-    gli altri, cosi' una sorpresa di struttura resta visibile nel dato invece
-    di sovrascrivere silenziosamente una riga buona.
+    Return ``''`` for graduate profile survey sheets, where the duplicate does not exist, and
+    ``sconosciuta`` when the expected class is absent. The latter value keeps
+    unexpected structure visible rather than silently overwriting a valid row.
 
-    NON basta guardare il numero. La pagina porta le due versioni una dopo
-    l'altra, la seconda con lo stesso indice +100, e il suo swapBlocchi()
-    nasconde .datiprofilo4..11 mostrando .datiprofilo104..114. Ma il ciclo che
-    NASCONDE parte da 4 mentre quello che MOSTRA parte da 3: .datiprofilo3
-    resta visibile in entrambe le modalita', ed e' figlio unico (103 non
-    esiste). Quindi "non e' >= 100" significa soltanto "non e' la copia
-    ampia" — per un blocco appaiato equivale a "restrittiva", per un blocco
-    spaiato no. Prima si dava per scontato che equivalesse sempre, e le 837
-    righe di "2b. Formazione post-laurea" finivano marchiate 'restrittiva' pur
-    valendo per entrambe: filtrando su 'ampia' sarebbero sparite dalla vista
-    pur avendo dati buoni. Ora il gemello si guarda invece di presumerlo."""
+    The number alone is insufficient. The page places the second version at
+    the first index plus 100; its swapBlocchi() hides .datiprofilo4..11 and
+    shows .datiprofilo104..114. Because the hide loop starts at 4 and the show
+    loop starts at 3, .datiprofilo3 remains visible in both modes and has no
+    .datiprofilo103 counterpart. Thus an index below 100 means only that the
+    block is not the broad copy: it means restrictive for paired blocks, but
+    not for an unpaired block. The unpaired "2b. Formazione post-laurea"
+    contains 837 rows valid for both definitions, so classifying it as
+    restrictive would hide valid data when filtering for the broad definition.
+    The counterpart is therefore checked explicitly.
+
+    Args:
+        tabella: Parsed data table.
+        indagine: Survey identifier.
+        indici_presenti: Block indices present in the sheet.
+
+    Returns:
+        The employment-definition label for the table.
+    """
     if indagine != "occupazione":
         return ""
     indice = indice_blocco(tabella)
@@ -193,9 +240,18 @@ def definizione_di(tabella, indagine, indici_presenti):
 
 
 def estrai_righe(tabella):
-    """Da una tabella dati2..dati11 a righe-dato, scorrendo le celle in modo
-    lineare senza assumere un passo fisso (il preambolo puo' essere dispari).
-    Ogni riga: {sezione, categoria, indicatore, valore} (valore ancora grezzo)."""
+    """Extract tidy rows from a data table.
+
+    Cells are scanned linearly without assuming a fixed stride because the
+    introductory content may have an irregular length. Each row contains
+    ``sezione``, ``categoria``, ``indicatore``, and the still-raw ``valore``.
+
+    Args:
+        tabella: Parsed data table.
+
+    Returns:
+        A list of extracted row dictionaries.
+    """
     sezione = tabella.get("summary", "").strip()
     celle = [c.get_text(strip=True) for c in tabella.find_all(["th", "td"])]
 
@@ -205,22 +261,22 @@ def estrai_righe(tabella):
     while i < len(celle):
         testo = celle[i]
 
-        # cella di pura struttura: vuota, titolo sezione, header colonna
+        # Structural cells contain no value: blank, section title, or header.
         if testo == "" or testo == sezione or e_intestazione_colonna(testo):
             i += 1
             continue
 
         valore = celle[i + 1] if i + 1 < len(celle) else ""
 
-        # Se il "valore" e' l'intestazione di colonna, allora 'testo' e' un titolo
-        # di tabella (non un indicatore): lo salto. Difende dal caso in cui il
-        # titolo nella cella non combacia col 'summary' per via di apici diversi.
+        # If the candidate value is a column header, the current text is a
+        # table title rather than an indicator. This also handles titles whose
+        # punctuation differs from the table summary.
         if e_intestazione_colonna(valore):
             i += 1
             continue
 
         if valore == "":
-            # etichetta senza valore = intestazione di categoria (contesto persistente)
+            # A label without a value introduces a persistent category context.
             categoria = testo
             i += 1
         else:
@@ -238,10 +294,19 @@ def estrai_righe(tabella):
 
 
 def estrai_numerosita(dati1):
-    """Da dati1 ('PERCORSI DI LAUREA') -> numero_laureati (base amministrativa),
-    numero_compilatori (base questionario) e tasso_compilazione (gia' dato dalla
-    fonte, non ricalcolato). Cerca le etichette per contenuto: una piccola
-    variazione di dicitura non rompe; se un'etichetta sparisce lo segnala."""
+    """Extract counts and response rate from ``dati1``.
+
+    Returns the administrative graduate count, questionnaire respondent count,
+    and source-provided response rate without recalculating it. Labels are
+    matched by content so small wording changes do not break extraction; a
+    missing label is reported in the result.
+
+    Args:
+        dati1: Parsed counts table.
+
+    Returns:
+        A dictionary containing counts, response rate, and raw source values.
+    """
     celle = [c.get_text(strip=True) for c in dati1.find_all(["th", "td"])]
     titolo = dati1.get("summary", "").strip()
 
@@ -271,12 +336,12 @@ def estrai_numerosita(dati1):
         return int(v) if intero else v
 
     g_laureati = trova("numero di laureati")
-    # 'profilo' dice "hanno compilato il questionario", 'occupazione' dice
-    # "Numero di intervistati". E' la stessa grandezza — la base del
-    # questionario — chiamata in due modi: si cercano entrambe le diciture.
+    # The graduate profile survey uses "hanno compilato il questionario",
+    # while the employment outcomes survey uses "Numero di intervistati";
+    # the code matches "compilato" or "intervistat".
     g_compilatori = trova("compilato") or trova("intervistat")
-    # In 'occupazione' ci sono due tassi di risposta (sul totale dei laureati e
-    # sui contattabili): trova() prende il primo, cioe' quello sul totale.
+    # Occupation sheets contain rates over all graduates and over contactable
+    # graduates; trova() takes the first, which is the rate over all graduates.
     g_tasso = trova("tasso")
 
     risultato = {
@@ -298,20 +363,30 @@ def estrai_numerosita(dati1):
 
 
 def raccogli_scheda(html, params):
-    """Da una scheda intera -> lista di righe tidy complete.
-    Monta: identificativi (specchio della selezione) + numerosita' (da dati1)
-    + dati (dati2..dati11), con valore pulito e simboli speciali conservati."""
+    """Convert a complete sheet into a list of tidy rows.
+
+    Rows contain selection identifiers, counts from ``dati1``, and indicators
+    from the remaining data tables. Values are parsed while special symbols
+    remain represented by their annotations and raw text.
+
+    Args:
+        html: Complete sheet HTML.
+        params: Query parameters used to request the sheet.
+
+    Returns:
+        A list of tidy row dictionaries.
+    """
     zuppa = BeautifulSoup(html, "html.parser")
 
     dati1 = zuppa.find("table", id="dati1")
     num = estrai_numerosita(dati1) if dati1 is not None else {}
 
-    def norm(v):  # 'tutti' / assente = casella spenta -> stringa vuota
+    def norm(v):  # ``tutti`` and absent selections represent an empty field.
         return "" if v in ("tutti", None) else v
 
-    indagine = params.get("CONFIG", "")  # profilo / occupazione
+    indagine = params.get("CONFIG", "")  # ``profilo`` or ``occupazione``.
     identificativi = {
-        "anno": params.get("anno", ""),  # 'tutti' = serie storica: lo lascio com'e'
+        "anno": params.get("anno", ""),  # ``tutti`` denotes a time series.
         "indagine": indagine,
         "tipo_corso": norm(params.get("corstipo")),
         "ateneo": norm(params.get("ateneo")),
@@ -320,9 +395,8 @@ def raccogli_scheda(html, params):
         "corso": norm(params.get("postcorso")),
     }
 
-    # L'avviso di estrai_numerosita non va ingoiato: prima veniva calcolato e
-    # buttato, quindi un'etichetta cambiata si traduceva in colonne NULL senza
-    # che nessuno se ne accorgesse. Meglio rumoroso che silenzioso.
+    # Surface missing count labels instead of allowing changed source wording
+    # to produce NULL columns without an explicit warning.
     if num.get("_attenzione"):
         etichetta = " ".join(
             f"{k}={v}" for k, v in identificativi.items() if v
@@ -346,7 +420,7 @@ def raccogli_scheda(html, params):
                     "definizione": definizione,
                     "sezione": r["sezione"],
                     "categoria": r["categoria"]
-                    or "",  # None (nessuna categoria) -> '' per SQL
+                    or "",  # SQL stores the absence of a category as ``''``.
                     "indicatore": r["indicatore"],
                     "valore": valore,
                     "nota": nota,
@@ -359,7 +433,7 @@ def raccogli_scheda(html, params):
 
 
 if __name__ == "__main__":
-    # UNA sola richiesta al sito (frequenza educata): scarico, poi lavoro sull'HTML.
+    # Make one request, then process the returned HTML locally.
     html = scarica_scheda(PARAMS)
     print(f"Pagina scaricata: {len(html)} caratteri\n")
 
@@ -373,14 +447,14 @@ if __name__ == "__main__":
     righe = raccogli_scheda(html, PARAMS)
     print(f"\nRighe tidy complete: {len(righe)}")
 
-    # Conteggio per sezione: ci dice se tutte le 10 sezioni hanno prodotto righe.
+    # Count rows by section to check that every section produced output.
     from collections import Counter
 
     print("\nRighe per sezione:")
     for sez, n in Counter(r["sezione"] for r in righe).items():
         print(f"  {n:>4}  {sez}")
 
-    # Campione: prime 8 righe.
+    # Display a sample of the first eight rows.
     print("\nCampione (prime 8 righe):")
     for r in righe[:8]:
         print(
@@ -388,7 +462,7 @@ if __name__ == "__main__":
             f"{r['indicatore'][:34]:<34} = {r['valore']!s:<7} ({r['valore_raw']})"
         )
 
-    # Righe con simbolo speciale: devono comparire con la loro nota, non sparire.
+    # Special-symbol rows retain their annotations instead of disappearing.
     speciali = [r for r in righe if r["nota"] not in (None, "vuoto")]
     print(f"\nRighe con simbolo speciale: {len(speciali)}")
     for r in speciali[:5]:
@@ -396,7 +470,7 @@ if __name__ == "__main__":
             f"  {r['indicatore'][:34]:<34} raw={r['valore_raw']!r:<5} nota={r['nota']}"
         )
 
-    # Controllo di salute: 'non_riconosciuto' DEVE essere zero. Se non lo e', si guarda.
+    # Unrecognized values should be zero; print them for inspection otherwise.
     rossi = [r for r in righe if r["nota"] == "non_riconosciuto"]
     print(f"\nValori non riconosciuti (devono essere 0): {len(rossi)}")
     for r in rossi[:10]:

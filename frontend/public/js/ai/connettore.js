@@ -1,12 +1,11 @@
 // connettore.js
 //
-// Punto d'ingresso unico dello strato AI. La UI chiamera' SOLO questo:
-// gli passa la configurazione della connessione (scelta dall'utente) e la
-// frase; lui costruisce il prompt col vocabolario, chiama l'adattatore giusto,
-// e restituisce la query GIA' VALIDATA (passata dal muro di validatore.js).
+// Single entry point for the AI layer. The UI supplies the user-selected
+// connection configuration and request; this module builds the vocabulary
+// prompt, selects the adapter, and returns a query validated by validatore.js.
 //
-// Il resto dell'app non sa ne' quale provider c'e' sotto, ne' che l'output
-// dell'AI e' stato filtrato: riceve solo colonne+domande reali.
+// The rest of the application does not depend on the provider or filtering
+// details; it receives only real columns and questions.
 
 import { costruisciVocabolarioPerPrompt } from './vocabolario.js';
 import { validaQuery } from './validatore.js';
@@ -29,20 +28,28 @@ const ISTRUZIONI = [
   '- Rispondi SEMPRE e SOLO chiamando lo strumento imposta_confronto.',
 ].join('\n');
 
+/**
+ * Builds the provider-independent system prompt with the closed vocabulary.
+ *
+ * @returns {string} Instructions and vocabulary for the AI provider.
+ */
 function costruisciSystemPrompt() {
   return `${ISTRUZIONI}\n\n=== VOCABOLARIO ===\n${costruisciVocabolarioPerPrompt()}`;
 }
 
 /**
- * @param {{forma:'anthropic'|'openai', baseUrl:string, model:string, apiKey?:string}} config
- * @param {string} frase - la richiesta in linguaggio naturale
- * @returns {Promise<{colonne:any[], domande:string[], nota:string, scartati:object}>}
+ * Sends a request through the configured provider and validates its selections.
+ *
+ * @param {{forma:'anthropic'|'openai', baseUrl:string, model:string, apiKey?:string}} config - Provider configuration.
+ * @param {string} frase - Request in natural language.
+ * @returns {Promise<{colonne:any[], domande:string[], nota:string, scartati:object}>} Validated query.
+ * @throws {Error} If the provider request fails or returns an unusable response.
  */
 export async function chiediConfronto(config, frase) {
   const systemPrompt = costruisciSystemPrompt();
   const adattatore = config.forma === 'anthropic' ? chiediAnthropic : chiediOpenAI;
   const grezzo = await adattatore(config, systemPrompt, frase);
-  return validaQuery(grezzo); // <- il muro: solo reale passa
+  return validaQuery(grezzo); // Validation boundary: only real selections pass.
 }
 
 export { costruisciSystemPrompt };

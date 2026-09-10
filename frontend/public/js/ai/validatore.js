@@ -1,16 +1,15 @@
 // validatore.js
 //
-// IL MURO (fase2-progettazione.md, §3, Livello 2).
+// Validation boundary for AI output.
 //
-// Qualunque cosa torni dall'AI — provider serio o modellino locale traballante
-// — passa di qui PRIMA di toccare la UI. Ogni codice deve esistere davvero,
-// ogni domanda dev'essere un id reale di CONFIG_FILTRI. Cio' che non e' reale
-// viene SCARTATO, non mostrato. Questa e' la garanzia che non dipende dal
-// modello: non ci fidiamo dell'AI, ci fidiamo di questa funzione.
+// All AI output passes through this module before reaching the UI, regardless
+// of provider or model. Every code must exist and every question must be a real
+// CONFIG_FILTRI ID. Nonexistent values are discarded rather than displayed.
+// This guarantee does not depend on model behaviour.
 //
-// Il caso peggiore possibile e' "l'AI ha selezionato male, correggi a mano",
-// MAI "un numero sbagliato in tabella" (i numeri non passano nemmeno di qui:
-// arrivano solo da sql.js, e nello schema del tool non c'e' campo valore).
+// The worst possible outcome is an incorrect selection that can be corrected
+// manually, never an incorrect table number: numbers come only from sql.js,
+// and the tool schema has no value field.
 
 import {
   CODICI_ATENEO_VALIDI,
@@ -19,14 +18,16 @@ import {
 } from './vocabolario.js';
 
 /**
- * @param {any} grezzo - l'oggetto arrivato dal tool-call dell'AI (non fidato)
+ * Filters untrusted tool output against the real application vocabulary.
+ *
+ * @param {any} grezzo - Untrusted object returned by the AI tool call.
  * @returns {{colonne: {tipo:string,codice:string}[], domande: string[],
- *            nota: string, scartati: {colonne:any[], domande:any[]}}}
+ *            nota: string, scartati: {colonne:any[], domande:any[]}}} Valid selections and discarded values.
  */
 export function validaQuery(grezzo) {
   const scartati = { colonne: [], domande: [] };
 
-  // --- Colonne: tieni solo (tipo, codice) coerenti e realmente esistenti ---
+  // Keep only coherent, existing (tipo, codice) pairs.
   const colonne = [];
   const vistoColonna = new Set();
   const colonneGrezze = Array.isArray(grezzo?.colonne) ? grezzo.colonne : [];
@@ -49,7 +50,7 @@ export function validaQuery(grezzo) {
     }
   }
 
-  // --- Domande: tieni solo id reali, senza duplicati, nell'ordine ricevuto ---
+  // Keep only real IDs, without duplicates, in received order.
   const domande = [];
   const vistoId = new Set();
   const domandeGrezze = Array.isArray(grezzo?.domande) ? grezzo.domande : [];
@@ -62,7 +63,7 @@ export function validaQuery(grezzo) {
     }
   }
 
-  // --- Nota: solo testo, mai interpretata come dato ---
+  // Keep the note as text; never interpret it as data.
   const nota =
     typeof grezzo?.nota_per_utente === 'string' ? grezzo.nota_per_utente : '';
 

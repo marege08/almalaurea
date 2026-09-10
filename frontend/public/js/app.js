@@ -1,11 +1,11 @@
 // app.js
 //
-// Collega i pezzi già pronti:
-//   caricamento sql.js + almalaurea.sqlite  ->  CONFIG_FILTRI (config-filtri.js)
-//   ->  query per scheda selezionata  ->  processData (processData.js)
-//   ->  tabella di confronto.
+// Connects the prepared components:
+//   sql.js + almalaurea.sqlite loading -> CONFIG_FILTRI (config-filtri.js)
+//   -> selected-sheet queries -> processData (processData.js)
+//   -> comparison table.
 //
-// Nessun bundler: import ES module diretti, file serviti staticamente.
+// No bundler is used: ES modules are imported directly from static files.
 
 import { CONFIG_FILTRI } from './config-filtri.js';
 import { processData } from './processData.js';
@@ -15,25 +15,23 @@ import { chiediConfronto } from './ai/connettore.js';
 
 const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
 
-// --- Stato in memoria (non in localStorage: vedi restrizioni artifact) ---
+// --- In-memory UI state ---
 let db = null;
 let codiciAteneo = [];
 let codiciGruppo = [];
-let colonne = []; // [{ id, tipo: 'ateneo'|'gruppo', codice }]
+let colonne = []; // Entries have the shape { id, tipo: 'ateneo'|'gruppo', codice }.
 let contatoreColonne = 0;
 
-// --- Definizione di "occupato" (riguarda solo l'indagine 'occupazione') ---
-// La scheda AlmaLaurea porta DUE versioni complete degli stessi dati, una per
-// ciascuna definizione ufficiale, e il suo JavaScript ne mostra una sola.
-// Partiamo dalla stessa scelta del sito (ampia, per gli anni dopo il 2020):
-// se a parita' di domanda il sito ufficiale e questo mostrassero numeri
-// diversi, l'errore sembrerebbe nostro anche quando non lo e'.
+// --- Definition of "employed" (only the `occupazione` employment outcomes survey) ---
+// AlmaLaurea sheets contain TWO complete versions of these data, one for each
+// official definition, while their JavaScript displays only one. The default
+// matches the site (ampia for years after 2020), avoiding apparent discrepancies
+// between the official site and this application for the same question.
 const DEFINIZIONE_PREDEFINITA = 'ampia';
 let definizioneScelta = DEFINIZIONE_PREDEFINITA;
 let definizioniDisponibili = [];
 
-// Le parole sono di AlmaLaurea, copiate dai tooltip delle sue schede: sono
-// definizioni ufficiali, non parafrasi nostre.
+// These are AlmaLaurea's official definitions, copied from sheet tooltips.
 const TESTO_DEFINIZIONE = {
   ampia:
     'Si considerano occupati tutti coloro che dichiarano di svolgere un\u2019attivit\u00e0, ' +
@@ -44,19 +42,19 @@ const TESTO_DEFINIZIONE = {
     'un\u2019attivit\u00e0 di formazione (tirocinio, praticantato, dottorato, specializzazione, ecc.).',
 };
 
-// Una voce e' interrogabile con la definizione scelta se non dipende dalla
-// definizione ('' = indagine profilo, dove il doppione non esiste;
-// 'condivisa' = blocco non doppiato nella pagina, vale per entrambe) oppure se
-// esiste proprio sotto la definizione scelta. Le 4 domande che esistono sotto
-// una sola definizione vengono cosi' nascoste invece di mostrare trattini.
+// An entry is queryable when it is definition-independent ('' is the graduate
+// profile survey, where no duplicate exists; 'condivisa' is a block not duplicated on
+// the page and valid for both definitions) or exists under the selected
+// definition. The four questions available under only one definition are thus
+// hidden instead of rendered as dashes.
 function voceDisponibile(voce) {
   return voce.definizioni.some(
     (d) => d === '' || d === 'condivisa' || d === definizioneScelta
   );
 }
 
-// Mappa id voce -> { voce, macro } per ritrovare rapidamente la voce di
-// CONFIG_FILTRI a partire dall'id del checkbox selezionato.
+// Map entry IDs to { voce, macro } for quick CONFIG_FILTRI lookup from a
+// selected checkbox ID.
 const VOCE_PER_ID = new Map();
 for (const macro of ORDINE_MACRO) {
   for (const voce of CONFIG_FILTRI[macro]) {
@@ -64,7 +62,7 @@ for (const macro of ORDINE_MACRO) {
   }
 }
 
-// --- Riferimenti DOM ---
+// --- DOM references ---
 const elStatoCaricamento = document.getElementById('stato-caricamento');
 const elAreaApp = document.getElementById('area-app');
 const elAreaErrore = document.getElementById('area-errore');
@@ -77,6 +75,12 @@ const elNotaDefinizione = document.getElementById('nota-definizione');
 const elTabellaHead = document.getElementById('tabella-head');
 const elTabellaBody = document.getElementById('tabella-body');
 
+/**
+ * Displays an error message and optionally logs the underlying error.
+ *
+ * @param {string} messaggio - Message to display.
+ * @param {Error|undefined} errore - Error to log, when available.
+ */
 function mostraErrore(messaggio, errore) {
   elStatoCaricamento.classList.add('nascosto');
   elAreaErrore.classList.remove('nascosto');
@@ -84,8 +88,9 @@ function mostraErrore(messaggio, errore) {
   if (errore) console.error(errore);
 }
 
-// --- 1. Caricamento del database (sql.js + almalaurea.sqlite) ---
+// --- 1. Database loading (sql.js + almalaurea.sqlite) ---
 
+/** @returns {Promise<object>} In-memory sql.js database. */
 async function caricaDatabase() {
   const SQL = await initSqlJs({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/${file}`,
@@ -98,18 +103,18 @@ async function caricaDatabase() {
   return new SQL.Database(new Uint8Array(buffer));
 }
 
+/** @param {object} database - sql.js database to inspect. */
 function leggiCodici(database) {
   const ateneo = database.exec("SELECT DISTINCT ateneo FROM dati WHERE ateneo != '' ORDER BY ateneo;");
   const gruppo = database.exec("SELECT DISTINCT gruppo FROM dati WHERE gruppo != '' ORDER BY gruppo;");
   codiciAteneo = ateneo.length ? ateneo[0].values.map((riga) => riga[0]) : [];
   codiciGruppo = gruppo.length ? gruppo[0].values.map((riga) => riga[0]) : [];
-  // Il codice gruppo è testo ('1'..'15'): ordine numerico, non alfabetico
-  // (altrimenti '10' finirebbe prima di '2').
+  // Group codes are text ('1'..'15'), so numeric rather than lexicographic
+  // ordering is required; otherwise '10' would precede '2'.
   codiciGruppo.sort((a, b) => Number(a) - Number(b));
 
-  // Le definizioni REALI del dataset, non un elenco scritto a mano: se un
-  // aggiornamento dei dati ne togliesse una, il selettore la smette di
-  // offrirla invece di proporre una scelta che non da' righe.
+  // Read definitions from the dataset rather than a hard-coded list. If a data
+  // update removes one, the selector stops offering a choice with no rows.
   const definizioni = database.exec(
     "SELECT DISTINCT definizione FROM dati " +
     "WHERE definizione NOT IN ('', 'condivisa', 'sconosciuta') ORDER BY definizione;"
@@ -122,25 +127,50 @@ function leggiCodici(database) {
   }
 }
 
-// --- 2. Selettore delle schede da confrontare ---
+// --- 2. Selector for sheets to compare ---
 
+/**
+ * Returns codes for the selected entity type.
+ *
+ * @param {string} tipo - Entity type.
+ * @returns {string[]} Codes for the selected entity type.
+ */
 function codiciPerTipo(tipo) {
   return tipo === 'ateneo' ? codiciAteneo : codiciGruppo;
 }
 
+/**
+ * Returns the display label for an entity code.
+ *
+ * @param {string} tipo - Entity type.
+ * @param {string} codice - Entity code.
+ * @returns {string} Display label.
+ */
 function etichettaCodice(tipo, codice) {
   if (tipo === 'ateneo') return NOMI_ATENEO[codice] ?? `Ateneo ${codice}`;
   return NOMI_GRUPPO[codice] ?? `Gruppo ${codice}`;
 }
 
+/**
+ * Returns codes sorted by display label.
+ *
+ * @param {string} tipo - Entity type.
+ * @returns {string[]} Codes sorted by display label.
+ */
 function codiciOrdinatiPerVisualizzazione(tipo) {
   const codici = [...codiciPerTipo(tipo)];
-  // Sia per atenei sia per gruppi ha senso scorrere i nomi in ordine
-  // alfabetico, non i codici (che non hanno un ordine significativo).
+  // Both universities and groups are easier to scan alphabetically by name;
+  // their codes have no meaningful display order.
   codici.sort((a, b) => etichettaCodice(tipo, a).localeCompare(etichettaCodice(tipo, b), 'it'));
   return codici;
 }
 
+/**
+ * Creates a comparison column.
+ *
+ * @param {string} tipoIniziale - Initial entity type.
+ * @param {string} codiceIniziale - Initial entity code.
+ */
 function creaColonna(tipoIniziale, codiceIniziale) {
   const id = `colonna-${contatoreColonne++}`;
   const stato = { id, tipo: tipoIniziale, codice: codiceIniziale };
@@ -199,50 +229,53 @@ function creaColonna(tipoIniziale, codiceIniziale) {
 }
 
 elBtnAggiungiColonna.addEventListener('click', () => {
-  // Propone di default un ateneo non ancora scelto, se disponibile.
+  // Prefer a university that has not already been selected, when available.
   const usati = new Set(colonne.filter((c) => c.tipo === 'ateneo').map((c) => c.codice));
   const prossimo = codiciAteneo.find((c) => !usati.has(c)) ?? codiciAteneo[0];
   creaColonna('ateneo', prossimo);
   renderTabella();
 });
 
-// --- 3. Accordion dei filtri (domande), generato da CONFIG_FILTRI ---
+// --- 3. Question-filter accordion generated from CONFIG_FILTRI ---
 
-// Contatori dei filtri, richiamabili anche dallo strato AI (applicaQuery).
+// Filter counters, also used by the AI layer (applicaQuery).
 const conteggiPerMacro = new Map();
-// voce.id -> l'elemento <label> della sua casella, per poterla nascondere
-// quando la definizione scelta non la prevede.
+// voce.id -> its checkbox label, so entries unavailable under the selected
+// definition can be hidden.
 const ELEMENTO_VOCE = new Map();
 
+/** @param {string} macro */
 function aggiornaConteggio(macro) {
   const dati = conteggiPerMacro.get(macro);
   if (!dati) return;
-  // Il denominatore sono le domande DISPONIBILI con la definizione scelta,
-  // non tutte: "3 di 22" quando 2 sono nascoste sarebbe una bugia.
+  // The denominator includes only questions available under the selected
+  // definition; "3 of 22" would be misleading if two are hidden.
   const disponibili = dati.voci.filter(voceDisponibile);
   const tot = disponibili.filter((v) => document.getElementById(`chk-${v.id}`)?.checked).length;
   dati.spanConteggio.textContent = `${tot} di ${disponibili.length} selezionate`;
 }
 
-// Le caselle si costruiscono UNA volta per tutte le domande e poi si mostrano
-// o si nascondono: cosi' cambiare definizione non azzera le spunte
-// dell'utente su tutto il resto della pagina.
+// Build each checkbox once and toggle visibility so changing the definition
+// does not clear the user's selections elsewhere on the page.
+/** Updates question visibility for the selected occupation definition. */
 function aggiornaVisibilitaVoci() {
   for (const [id, elemento] of ELEMENTO_VOCE) {
     const trovata = VOCE_PER_ID.get(id);
     if (trovata) elemento.hidden = !voceDisponibile(trovata.voce);
   }
   for (const dati of conteggiPerMacro.values()) {
-    // Una macro-categoria le cui domande sono tutte fuori definizione non
-    // deve restare aperta e vuota.
+    // A macro-category with no questions under the definition should not remain
+    // open and empty.
     dati.details.hidden = !dati.voci.some(voceDisponibile);
   }
   aggiornaTuttiIConteggi();
 }
+/** Refreshes all macro-category question counters. */
 function aggiornaTuttiIConteggi() {
   for (const macro of conteggiPerMacro.keys()) aggiornaConteggio(macro);
 }
 
+/** Renders the question-filter accordion. */
 function renderFiltri() {
   elAccordionFiltri.innerHTML = '';
   conteggiPerMacro.clear();
@@ -294,15 +327,15 @@ function renderFiltri() {
   }
 }
 
-// --- 3b. Selettore della definizione di "occupato" ---
+// --- `occupazione` employment outcomes survey definition selector ---
 
-// La macro-categoria che ospita l'indagine 'occupazione' non e' scritta a
-// mano: viene dai dati, cosi' se un domani cambia nome nel generatore questo
-// testo non mente.
+// Derive the macro-category containing the `occupazione` employment outcomes survey from the data,
+// so a future generator rename does not make this text inaccurate.
 const MACRO_OCCUPAZIONE = ORDINE_MACRO.find((m) =>
   CONFIG_FILTRI[m].some((v) => v.indagine === 'occupazione')
 );
 
+/** Updates the explanation and available-question count for the definition. */
 function aggiornaNotaDefinizione() {
   if (!elNotaDefinizione || !MACRO_OCCUPAZIONE) return;
   const voci = CONFIG_FILTRI[MACRO_OCCUPAZIONE];
@@ -313,9 +346,10 @@ function aggiornaNotaDefinizione() {
     `${voci.length} domande di «${MACRO_OCCUPAZIONE}»; le altre categorie non cambiano.`;
 }
 
+/** Renders the employment outcomes survey definition selector when multiple definitions exist. */
 function renderSelettoreDefinizione() {
-  // Con meno di due definizioni il selettore non ha senso e resta nascosto:
-  // e' il caso di un dataset che contenga solo l'indagine 'profilo'.
+  // With fewer than two definitions, the selector has no purpose and remains
+  // hidden; this occurs when the dataset contains only the graduate profile survey.
   if (!elRiquadroDefinizione || definizioniDisponibili.length < 2) return;
 
   elSelDefinizione.innerHTML = definizioniDisponibili
@@ -334,9 +368,9 @@ function renderSelettoreDefinizione() {
   aggiornaNotaDefinizione();
 }
 
+/** @returns {{macro:string, voci:object[]}[]} Selected questions by category. */
 function vociSelezionate() {
-  // Restituisce le voci selezionate, raggruppate per macro-categoria,
-  // nello stesso ordine di CONFIG_FILTRI (mai un ordine "a caso").
+  // Preserve CONFIG_FILTRI order rather than relying on arbitrary iteration order.
   const risultato = [];
   for (const macro of ORDINE_MACRO) {
     const voci = CONFIG_FILTRI[macro].filter(
@@ -347,28 +381,41 @@ function vociSelezionate() {
   return risultato;
 }
 
-// --- 4. Interrogazione di una scheda (ateneo o gruppo) ---
+// --- 4. Querying a sheet (university or group) ---
 
 const SEPARATORE_CHIAVE = '\u0001';
 
-// L'indagine fa parte della chiave: 'profilo' e 'occupazione' hanno coppie
-// (categoria, indicatore) che si somigliano, e tenerle separate qui costa una
-// stringa in piu' e toglie un'intera categoria di errori muti.
+// Include the survey in the key: the graduate profile survey and employment
+// outcomes survey contain similar
+// (category, indicator) pairs, and this extra string prevents silent collisions.
+/**
+ * Builds a stable key for a data row.
+ *
+ * @param {string} indagine - Survey identifier.
+ * @param {string} categoria - Category label.
+ * @param {string} indicatore - Indicator label.
+ * @returns {string} Stable row key.
+ */
 function chiave(indagine, categoria, indicatore) {
   return `${indagine}${SEPARATORE_CHIAVE}${categoria}${SEPARATORE_CHIAVE}${indicatore}`;
 }
 
+/**
+ * Queries the data for one sheet.
+ *
+ * @param {{tipo:string,codice:string}} colonna - Sheet selection.
+ * @returns {{mappa:Map,numerosita:Map}} Sheet data and sample sizes.
+ */
 function interrogaScheda(colonna) {
   const colonnaFiltro = colonna.tipo === 'ateneo' ? 'ateneo' : 'gruppo';
   const altraColonna = colonna.tipo === 'ateneo' ? 'gruppo' : 'ateneo';
 
-  // Il filtro sulla definizione NON e' un dettaglio di presentazione. Senza,
-  // le due versioni di 'occupazione' tornano entrambe con la stessa coppia
-  // (categoria, indicatore) — 69 collisioni — e l'ultima letta sovrascrive la
-  // prima in silenzio, su tassi di occupazione che differiscono di sei punti.
-  // '' e 'condivisa' passano sempre: sono le righe che non dipendono dalla
-  // definizione (rispettivamente il profilo, e i blocchi non doppiati nella
-  // pagina AlmaLaurea).
+  // The definition filter is not merely presentational. Without it, both
+  // 'occupazione' versions return the same (category, indicator) pair for
+  // 69 collisions, and the later row silently overwrites the first even when
+  // employment rates differ by six points. '' and 'condivisa' always pass:
+  // they are definition-independent rows (the graduate profile survey and blocks not
+  // duplicated on the AlmaLaurea page, respectively).
   const stmt = db.prepare(
     `SELECT indagine, categoria, indicatore, valore, nota, valore_raw,
             numero_laureati, numero_compilatori
@@ -379,11 +426,8 @@ function interrogaScheda(colonna) {
   stmt.bind({ ':codice': colonna.codice, ':definizione': definizioneScelta });
 
   const mappa = new Map();
-  // La numerosita' e' PER INDAGINE: a Bari il profilo conta 7.401 laureati e
-  // 6.999 compilatori, l'occupazione 7.042 laureati e 4.445 intervistati.
-  // Prima si prendevano i due numeri dalla PRIMA riga restituita da una query
-  // senza ORDER BY: tornava quella giusta solo per l'ordine di inserimento
-  // nella tabella, cioe' per fortuna.
+  // Keep sample sizes per survey because reading them from an arbitrary row
+  // of an unordered query would make them depend on insertion order.
   const numerosita = new Map();
 
   while (stmt.step()) {
@@ -405,12 +449,19 @@ function interrogaScheda(colonna) {
   return { mappa, numerosita };
 }
 
-// --- 5. Rendering della tabella di confronto ---
+// --- 5. Rendering the comparison table ---
 
-// Una riga di numerosita' per ogni indagine effettivamente mostrata in
-// tabella. Un solo numero non basta piu': le due indagini intervistano
-// collettivi diversi, e attribuire al profilo la numerosita' di occupazione
-// (o viceversa) e' un dato sbagliato scritto sotto il nome dell'ateneo.
+// Show one sample-size row for each survey present in the table. One number is
+// insufficient because the surveys cover different populations; assigning the
+// employment sample size to the profile (or vice versa) would mislabel the data.
+/**
+ * Formats a comparison-column header.
+ *
+ * @param {object} colonna - Sheet selection.
+ * @param {Map} numerosita - Sample sizes by survey.
+ * @param {string[]} indaginiMostrate - Surveys displayed in the table.
+ * @returns {HTMLElement} Column header.
+ */
 function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate) {
   const contenitore = document.createElement('div');
   const riga1 = document.createElement('div');
@@ -434,6 +485,13 @@ function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate) {
   return contenitore;
 }
 
+/**
+ * Creates a text table cell.
+ *
+ * @param {string} testo - Cell text.
+ * @param {string|undefined} classe - Optional CSS class.
+ * @returns {HTMLElement} Table cell.
+ */
 function creaCellaTesto(testo, classe) {
   const td = document.createElement('td');
   if (classe) td.className = classe;
@@ -441,6 +499,12 @@ function creaCellaTesto(testo, classe) {
   return td;
 }
 
+/**
+ * Creates a table cell for a data value.
+ *
+ * @param {object|undefined} infoValore - Value information.
+ * @returns {HTMLElement} Value cell.
+ */
 function creaCellaValore(infoValore) {
   const td = document.createElement('td');
   if (!infoValore) {
@@ -457,6 +521,7 @@ function creaCellaValore(infoValore) {
   return td;
 }
 
+/** Renders the comparison table from the current selections and database. */
 function renderTabella() {
   elTabellaHead.innerHTML = '';
   elTabellaBody.innerHTML = '';
@@ -470,15 +535,14 @@ function renderTabella() {
     return;
   }
 
-  // Interroga ogni colonna una sola volta (non una query per ogni domanda).
+  // Query each column once rather than issuing one query per question.
   const datiPerColonna = colonne.map((colonna) => ({
     colonna,
     ...interrogaScheda(colonna),
   }));
 
-  // Le domande scelte si calcolano PRIMA dell'intestazione: e' da queste che
-  // si sa quali indagini stanno per comparire, e quindi quali numerosita'
-  // vanno scritte sotto il nome di ogni colonna.
+  // Determine selected questions before rendering the header to identify which
+  // surveys will appear and which sample sizes belong below each column name.
   const gruppi = vociSelezionate();
   const indaginiMostrate = [];
   for (const { voci } of gruppi) {
@@ -487,7 +551,7 @@ function renderTabella() {
     }
   }
 
-  // --- Intestazione ---
+  // --- Header ---
   const trHead = document.createElement('tr');
   const thDomanda = document.createElement('th');
   thDomanda.className = 'colonna-domanda';
@@ -500,7 +564,7 @@ function renderTabella() {
   }
   elTabellaHead.appendChild(trHead);
 
-  // --- Corpo, raggruppato per macro-categoria ---
+  // --- Body grouped by macro-category ---
 
   if (gruppi.length === 0) {
     const tr = document.createElement('tr');
@@ -522,7 +586,7 @@ function renderTabella() {
 
     for (const voce of voci) {
       if (voce.indicatori.length === 1) {
-        // Indicatore standalone: una riga, valore diretto.
+        // Standalone indicator: one row with its direct value.
         const tr = document.createElement('tr');
         tr.className = 'riga-domanda-intestazione';
         tr.appendChild(creaCellaTesto(voce.label, 'colonna-domanda'));
@@ -532,8 +596,8 @@ function renderTabella() {
         }
         elTabellaBody.appendChild(tr);
       } else {
-        // Domanda con più opzioni di risposta: riga-titolo (senza valori)
-        // + una sotto-riga per ogni indicatore, stesse colonne-schede.
+        // Multi-option question: a title row without values followed by one
+        // sub-row per indicator, using the same sheet columns.
         const trTitolo = document.createElement('tr');
         trTitolo.className = 'riga-domanda-intestazione';
         trTitolo.appendChild(creaCellaTesto(voce.label, 'colonna-domanda'));
@@ -557,8 +621,9 @@ function renderTabella() {
   }
 }
 
-// --- 6. Avvio ---
+// --- 6. Startup ---
 
+/** Loads the dataset and initializes the comparison UI. */
 async function avvia() {
   try {
     db = await caricaDatabase();
@@ -568,7 +633,7 @@ async function avvia() {
       throw new Error('Il database è stato caricato ma non contiene codici ateneo/gruppo. Controlla il file.');
     }
 
-    // Due colonne di partenza, per vedere subito un confronto popolato.
+    // Start with two columns so the user immediately sees a populated comparison.
     creaColonna('ateneo', codiciAteneo[0]);
     creaColonna('ateneo', codiciAteneo[1] ?? codiciAteneo[0]);
 
@@ -588,9 +653,9 @@ async function avvia() {
 }
 
 
-// --- 7. Strato AI (Fase 2): frase in linguaggio naturale -> query validata ---
-// La UI parla SOLO con chiediConfronto(): riceve una query gia' passata dal
-// validatore (il muro), quindi qui arrivano solo colonne/domande reali.
+// --- 7. AI layer: natural-language request -> validated query ---
+// The UI uses only chiediConfronto(), which returns a query already filtered by
+// the validator; this layer therefore receives only real columns and questions.
 
 const CHIAVE_CONFIG_AI = 'almalaurea-ai-config';
 
@@ -612,15 +677,20 @@ const elAiKey = document.getElementById('ai-key');
 const elAiDimentica = document.getElementById('ai-dimentica');
 const elAiAiuto = document.getElementById('ai-aiuto');
 
-// Un indirizzo che punta alla macchina dell'utente: e' il caso in cui un
-// errore di rete significa quasi sempre "permesso mancante", non "server giu'".
+// An address on the user's machine usually means a network error indicates a
+// missing permission rather than an unavailable server.
 const RE_INDIRIZZO_LOCALE = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i;
 
-// Quando fetch fallisce per CORS il browser NON dice che e' stato il CORS: per
-// non rivelare informazioni sul server restituisce lo stesso TypeError generico
-// che darebbe una rete staccata. Distinguere i due casi dal messaggio e'
-// impossibile, ma il contesto basta: se l'indirizzo e' locale, la causa quasi
-// certa e' il permesso mancante. Meglio dirlo che lasciare "Failed to fetch".
+// When fetch fails because of CORS, the browser returns the same generic
+// TypeError as for a disconnected network rather than identifying CORS.
+// The message cannot distinguish the cases, but a local address makes missing
+// permission the most likely cause and is more useful than "Failed to fetch".
+/**
+ * Determines whether an error resembles a network failure.
+ *
+ * @param {unknown} errore - Error to inspect.
+ * @returns {boolean} Whether the error resembles a network failure.
+ */
 function eErroreDiRete(errore) {
   return (
     errore instanceof TypeError ||
@@ -628,6 +698,13 @@ function eErroreDiRete(errore) {
   );
 }
 
+/**
+ * Diagnoses a connection error for display to the user.
+ *
+ * @param {unknown} errore - Error to inspect.
+ * @param {string} baseUrl - Configured service URL.
+ * @returns {object|null} User-facing diagnosis.
+ */
 function diagnosticaConnessione(errore, baseUrl) {
   if (!eErroreDiRete(errore)) return null;
   if (RE_INDIRIZZO_LOCALE.test(baseUrl)) {
@@ -653,6 +730,7 @@ function diagnosticaConnessione(errore, baseUrl) {
   };
 }
 
+/** @returns {object} Current AI connection configuration. */
 function leggiConfigAi() {
   return {
     forma: elAiForma.value,
@@ -663,13 +741,14 @@ function leggiConfigAi() {
 }
 
 function salvaConfigAi() {
-  // localStorage puo' non essere disponibile (finestra privata, permessi):
-  // in quel caso la config resta valida solo per questa pagina, senza errori.
+  // localStorage may be unavailable in private windows or due to permissions;
+  // the configuration remains valid for this page without surfacing an error.
   try {
     localStorage.setItem(CHIAVE_CONFIG_AI, JSON.stringify(leggiConfigAi()));
-  } catch { /* ignora */ }
+  } catch { /* Storage is optional; keep the in-memory configuration. */ }
 }
 
+/** Restores the saved AI connection configuration when storage is available. */
 function caricaConfigAi() {
   let cfg = null;
   try {
@@ -683,14 +762,20 @@ function caricaConfigAi() {
   if (cfg.apiKey) elAiKey.value = cfg.apiKey;
 }
 
+/**
+ * Displays an AI request status.
+ *
+ * @param {string} testo - Status text.
+ * @param {string} tipo - Status category.
+ */
 function mostraStatoAi(testo, tipo) {
   elAiStato.textContent = testo;
   elAiStato.className = 'ai-stato' + (tipo ? ` ai-stato-${tipo}` : '');
 }
 
-// Applica una query VALIDATA allo stato della UI di Fase 1, poi ridisegna.
-// Difensivo: se un pezzo e' vuoto (l'AI non ha prodotto nulla di valido li),
-// NON azzera quella parte della vista dell'utente.
+// Apply a VALIDATED query to the comparison UI state, then redraw. If one part is
+// empty because the AI produced nothing valid for it, preserve that UI section.
+/** @param {{colonne:object[],domande:string[]}} query - Validated UI selections. */
 function applicaQuery({ colonne: colonneQuery, domande }) {
   if (colonneQuery.length > 0) {
     elColonneSchede.innerHTML = '';
@@ -710,6 +795,7 @@ function applicaQuery({ colonne: colonneQuery, domande }) {
   renderTabella();
 }
 
+/** Sends the current natural-language request to the configured AI provider. */
 async function inviaFraseAi() {
   const frase = elAiFrase.value.trim();
   if (!frase) { mostraStatoAi('Scrivi cosa vuoi confrontare.', 'errore'); return; }
@@ -746,13 +832,12 @@ async function inviaFraseAi() {
   }
 }
 
-// Aggancio degli eventi solo se il markup AI e' presente (degrado elegante:
-// senza il pannello, la UI di Fase 1 funziona identica).
+// Attach events only when the AI markup exists; without the panel, the comparison
+// UI continues to work unchanged.
 if (elAiInvia) {
-  // Le istruzioni CORS devono riportare l'indirizzo ESATTO di questa pagina:
-  // e' diverso in locale (http://localhost:8000) e online (https://...github.io),
-  // e un'origine sbagliata nella configurazione non autorizza nulla. Quindi si
-  // scrive a runtime, non a mano nell'HTML.
+  // CORS instructions must contain this page's EXACT address. It differs
+  // locally (http://localhost:8000) and online (https://...github.io), and a
+  // wrong origin authorizes nothing, so write it at runtime rather than in HTML.
   for (const el of document.querySelectorAll('.ai-origine')) {
     el.textContent = location.origin;
   }
@@ -773,7 +858,7 @@ if (elAiInvia) {
     el.addEventListener('change', salvaConfigAi);
   }
   elAiDimentica.addEventListener('click', () => {
-    try { localStorage.removeItem(CHIAVE_CONFIG_AI); } catch { /* ignora */ }
+    try { localStorage.removeItem(CHIAVE_CONFIG_AI); } catch { /* Storage is optional. */ }
     elAiKey.value = '';
     mostraStatoAi('Configurazione AI dimenticata da questo browser.', 'ok');
   });
