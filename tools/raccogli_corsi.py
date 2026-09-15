@@ -87,7 +87,34 @@ CREATE TABLE IF NOT EXISTS _scoperta (
     quando TEXT NOT NULL,
     PRIMARY KEY (ateneo, gruppo)   -- un gruppo gia' interrogato non si ripete
 );
+
+CREATE TABLE IF NOT EXISTS _inesistenti (
+    chiave TEXT PRIMARY KEY,       -- "<ateneo>/<corso>/<indagine>"
+    quando TEXT NOT NULL           -- schede che AlmaLaurea dice di non avere
+);
 """
+
+# visualizza.php risponde HTTP 400 in due casi che col solo codice non si
+# distinguono, e che vanno trattati all'opposto:
+#   - "Parametri di interrogazione non coerenti": la scheda NON ESISTE (per
+#     esempio l'indagine occupazione su un corso senza intervistati). Ritentarla
+#     e' inutile, per sempre.
+#   - "Impossibile connettersi": un guasto passeggero dei server di AlmaLaurea.
+#     Visto il 15 set 2026 su intere colonne di atenei, rientrato dopo pochi
+#     minuti. Va ritentato come qualunque altro fallimento.
+# Quindi decide il testo della pagina, e solo il primo caso finisce in
+# `_inesistenti`: nel dubbio una scheda resta "fallita", cioe' si ritenta.
+SEGNO_INESISTENTE = "Parametri di interrogazione non coerenti"
+
+
+def scheda_inesistente(errore):
+    """Vero solo se l'errore e' il 400 con cui AlmaLaurea dice che la scheda
+    non esiste. Qualunque altra cosa, compresi gli altri 400, e' un fallimento."""
+    risposta = getattr(errore, "response", None)
+    return (isinstance(errore, requests.HTTPError)
+            and risposta is not None
+            and risposta.status_code == 400
+            and SEGNO_INESISTENTE in risposta.text)
 
 
 class Budget:
@@ -164,26 +191,28 @@ def scopri(conn, ateneo, gruppi, pausa, budget):
 
 
 def scarica_corsi(conn, ateneo, indagini, pausa, budget, max_corsi=None):
-    """Scarica le schede dei corsi gia' scoperti. Salta quelle in `_fatte`."""
+    """Scarica le schede dei corsi gia' scoperti. Salta quelle in `_fatte` e
+    quelle in `_inesistenti`."""
     corsi = list(conn.execute(
         "SELECT gruppo, codice, nome FROM _corsi WHERE ateneo = ? ORDER BY codice",
         (ateneo,)))
-    fatte = {c for (c,) in conn.execute("SELECT chiave FROM _fatte")}
+    chiuse = {c for (c,) in conn.execute(
+        "SELECT chiave FROM _fatte UNION SELECT chiave FROM _inesistenti")}
 
     lavoro = []
     for indagine in indagini:
         for gruppo, codice, nome in corsi:
             chiave = f"{ateneo}/{codice}/{indagine}"
-            if chiave not in fatte:
+            if chiave not in chiuse:
                 lavoro.append((chiave, indagine, gruppo, codice, nome))
     if max_corsi:
         lavoro = lavoro[:max_corsi]
 
-    ok = vuote = falliti = 0
+    ok = vuote = falliti = inesistenti = 0
     for n, (chiave, indagine, gruppo, codice, nome) in enumerate(lavoro, start=1):
         if budget.scaduto():
             print(f"    tetto raggiunto: mi fermo pulito a {n - 1}/{len(lavoro)}")
-            return ok, vuote, falliti, True
+            return ok, vuote, falliti, inesistenti, True
         combo = genera_corsi({ateneo: [(gruppo, codice, nome)]}, config=indagine)[0]
         try:
             righe = raccogli_scheda(scarica_scheda(combo["params"]), combo["params"])
@@ -205,13 +234,22 @@ def scarica_corsi(conn, ateneo, indagini, pausa, budget, max_corsi=None):
             ok += 1
             print(f"    [{n}/{len(lavoro)}] {indagine:11s} {nome[:46]:46s} {n_righe:4d} righe")
         except Exception as e:
-            # Una scheda che esplode non si porta dietro l'ateneo. Non la segno
-            # come fatta, cosi' la ripartenza la ritenta da sola.
-            falliti += 1
-            print(f"    [{n}/{len(lavoro)}] FALLITA  {indagine} {codice} -> "
-                  f"{type(e).__name__}: {e}")
+            if scheda_inesistente(e):
+                conn.execute(
+                    "INSERT OR REPLACE INTO _inesistenti (chiave, quando) VALUES (?,?)",
+                    (chiave, datetime.now().isoformat(timespec="seconds")))
+                conn.commit()
+                inesistenti += 1
+                print(f"    [{n}/{len(lavoro)}] NON C'E' {indagine} {codice} -> "
+                      f"AlmaLaurea non ha questa scheda, non si ritenta")
+            else:
+                # Una scheda che esplode non si porta dietro l'ateneo. Non la
+                # segno come fatta, cosi' la ripartenza la ritenta da sola.
+                falliti += 1
+                print(f"    [{n}/{len(lavoro)}] FALLITA  {indagine} {codice} -> "
+                      f"{type(e).__name__}: {e}")
         time.sleep(pausa)
-    return ok, vuote, falliti, False
+    return ok, vuote, falliti, inesistenti, False
 
 
 def riepilogo(cartella, ateneo):
@@ -225,9 +263,16 @@ def riepilogo(cartella, ateneo):
         corsi = c.execute("SELECT COUNT(*) FROM _corsi").fetchone()[0]
         fatte = c.execute("SELECT COUNT(*) FROM _fatte").fetchone()[0]
         righe = c.execute("SELECT COUNT(*) FROM dati").fetchone()[0]
+        # Un database scritto prima che esistesse `_inesistenti` non ce l'ha
+        # finche' questo script non lo riapre in scrittura.
+        ha_tabella = c.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='_inesistenti'"
+        ).fetchone()
+        inesistenti = (c.execute("SELECT COUNT(*) FROM _inesistenti").fetchone()[0]
+                       if ha_tabella else 0)
     finally:
         c.close()
-    return corsi, fatte, righe, f.stat().st_size
+    return corsi, fatte, inesistenti, righe, f.stat().st_size
 
 
 def main():
@@ -296,7 +341,7 @@ def main():
           f"tetto {budget.restano()}")
     print(f"Cartella: {cartella}\n")
 
-    tot_ok = tot_vuote = tot_falliti = tot_scoperta_fallita = 0
+    tot_ok = tot_vuote = tot_falliti = tot_inesistenti = tot_scoperta_fallita = 0
     interrotto = False
     for ateneo in atenei:
         if budget.scaduto():
@@ -314,11 +359,12 @@ def main():
                 interrotto = True
                 break
             if not a.solo_scoperta:
-                ok, vuote, falliti, stop = scarica_corsi(
+                ok, vuote, falliti, inesistenti, stop = scarica_corsi(
                     conn, ateneo, indagini, a.pausa, budget, a.max_corsi)
                 tot_ok += ok
                 tot_vuote += vuote
                 tot_falliti += falliti
+                tot_inesistenti += inesistenti
                 if stop:
                     interrotto = True
                     break
@@ -327,6 +373,7 @@ def main():
 
     print(f"\n{'=' * 62}")
     print(f"Schede salvate: {tot_ok}   vuote: {tot_vuote}   fallite: {tot_falliti}"
+          f"   inesistenti: {tot_inesistenti}"
           f"{'   (INTERROTTO dal tetto)' if interrotto else ''}")
     if tot_scoperta_fallita:
         print(f"Gruppi con la scoperta fallita: {tot_scoperta_fallita} "
@@ -335,13 +382,13 @@ def main():
     for ateneo in atenei:
         r = riepilogo(cartella, ateneo)
         if r:
-            corsi, fatte, righe, peso = r
+            corsi, fatte, inesistenti, righe, peso = r
             print(f"  {ateneo}: {corsi:4d} corsi scoperti · {fatte:4d} schede · "
-                  f"{righe:6d} righe · {peso / 1e6:.1f} MB")
+                  f"{inesistenti:3d} inesistenti · {righe:6d} righe · {peso / 1e6:.1f} MB")
 
     # Fermarsi per il tetto NON e' un errore: e' il comportamento voluto, e un
     # codice diverso da zero farebbe suonare l'allarme del turno di notte per
-    # una raccolta andata benissimo.
+    # una raccolta andata benissimo. Le schede inesistenti non sono fallimenti.
     return 1 if (tot_falliti or tot_scoperta_fallita) and not tot_ok else 0
 
 
