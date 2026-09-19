@@ -92,6 +92,14 @@ CREATE TABLE IF NOT EXISTS _inesistenti (
     chiave TEXT PRIMARY KEY,       -- "<ateneo>/<corso>/<indagine>"
     quando TEXT NOT NULL           -- schede che AlmaLaurea dice di non avere
 );
+
+CREATE TABLE IF NOT EXISTS _scoperta_dubbia (
+    ateneo  TEXT NOT NULL,
+    gruppo  TEXT NOT NULL,
+    codice  TEXT NOT NULL,         -- il codice HTTP dell'ultimo tentativo
+    quando  TEXT NOT NULL,
+    PRIMARY KEY (ateneo, gruppo)   -- gruppi chiusi SENZA una risposta buona
+);
 """
 
 # visualizza.php risponde HTTP 400 in due casi che col solo codice non si
@@ -105,6 +113,29 @@ CREATE TABLE IF NOT EXISTS _inesistenti (
 # Quindi decide il testo della pagina, e solo il primo caso finisce in
 # `_inesistenti`: nel dubbio una scheda resta "fallita", cioe' si ritenta.
 SEGNO_INESISTENTE = "Parametri di interrogazione non coerenti"
+
+# solotendine.php, invece, NON ha un testo da leggere: quando rifiuta una
+# coppia ateneo x gruppo risponde HTTP 500 con il CORPO VUOTO (0 byte,
+# verificato il 19 set 2026 su 70117/10). Quindi qui la regola di
+# `scheda_inesistente()` non e' applicabile: non c'e' niente da distinguere
+# nel testo, e il solo codice HTTP non dice se il gruppo e' vuoto davvero o se
+# il sito sta avendo un guasto.
+#
+# Il discriminante e' la RIPETIZIONE: un vuoto vero e' stabile, un guasto no.
+# Misurato il 19 set 2026 — i 98 gruppi che avevano dato 500 nei blocchi 3 e 4,
+# ripassati a giorni di distanza, hanno rifatto 500 tutti e 98, e nessuno
+# nascondeva corsi veri. Quindi: si riprova sul posto qualche volta, e se
+# l'esito non cambia il gruppo si chiude (se no nessun ateneo si chiuderebbe
+# mai e ogni blocco sprecherebbe tempo sugli stessi buchi) — ma la chiusura
+# viene REGISTRATA in `_scoperta_dubbia`, cosi' quello che prima spariva in
+# silenzio diventa una lista che si puo' ripassare con `--verifica-dubbie`.
+# Le attese sono corte di proposito. Le ripetizioni servono ad assorbire il
+# COLPO DI TOSSE (un 503 di pochi secondi); un guasto vero dura minuti e non
+# lo prenderebbe nessuna attesa ragionevole — per quello c'e' `_scoperta_dubbia`.
+# Allungarle costerebbe solo tempo: ogni gruppo vuoto le paga tutte, e i gruppi
+# vuoti sono circa un quinto del totale.
+TENTATIVI_SCOPERTA = 3           # il primo piu' due ripetizioni
+ATTESE_SCOPERTA = (3.0, 9.0)     # quanto si aspetta prima di ognuna
 
 
 def scheda_inesistente(errore):
@@ -143,13 +174,44 @@ def apri(cartella, ateneo):
     return conn
 
 
+def chiedi_tendine(ateneo, gruppo):
+    """Un solo gruppo, con le ripetizioni.
+
+    Ritorna `(corsi, dubbio)`:
+      - `(lista, None)`  la risposta e' buona (la lista puo' essere vuota:
+                         quella e' una tendina vuota vera, HTTP 200);
+      - `([], "500")`    l'errore HTTP si e' ripetuto a ogni tentativo. Il
+                         gruppo verra' chiuso, ma da DUBBIO.
+
+    Un guasto di rete (che non e' un HTTPError) viene rilanciato al chiamante:
+    quello non chiude niente, ne' certo ne' dubbio, e si ritenta alla
+    ripartenza come ha sempre fatto."""
+    ultimo = "?"
+    for tentativo in range(TENTATIVI_SCOPERTA):
+        if tentativo:
+            time.sleep(ATTESE_SCOPERTA[min(tentativo - 1, len(ATTESE_SCOPERTA) - 1)])
+        try:
+            tendine = leggi_tendine(params_tendine(ateneo, gruppo))
+            return tendine.get("postcorso", []), None
+        except requests.HTTPError as e:
+            ultimo = str(e.response.status_code) if e.response is not None else "?"
+    return [], ultimo
+
+
 def scopri(conn, ateneo, gruppi, pausa, budget):
     """Chiede a solotendine.php quali corsi esistono, gruppo per gruppo.
 
     Un gruppo gia' interrogato non si ripete: sta in `_scoperta`. Un ateneo che
-    non ha corsi in un gruppo risponde con una tendina vuota o con un errore
-    HTTP — sono entrambi "non ho niente qui", non guasti, e si segnano come
-    fatti per non richiederli in eterno.
+    non ha corsi in un gruppo risponde con una tendina vuota (HTTP 200): quello
+    e' un "non ho niente qui" certo, e si segna come fatto.
+
+    UN ERRORE HTTP NON E' UNA RISPOSTA. solotendine.php rifiuta con 500 e corpo
+    vuoto, quindi non si puo' leggere niente per capire se il gruppo e' vuoto
+    davvero o se il sito sta avendo un guasto. Si riprova qualche volta
+    (`TENTATIVI_SCOPERTA`): se l'esito non cambia il gruppo si chiude lo
+    stesso — se no nessun ateneo arriverebbe mai a chiudersi — ma finisce anche
+    in `_scoperta_dubbia`, cioe' resta una lista da ripassare con
+    `--verifica-dubbie` invece di sparire in silenzio.
 
     Un guasto di RETE invece (timeout, connessione caduta) non dice niente sui
     corsi: segnarlo come fatto farebbe sparire per sempre, e in silenzio, tutti
@@ -165,18 +227,21 @@ def scopri(conn, ateneo, gruppi, pausa, budget):
         if budget.scaduto():
             return nuovi, falliti, True
         try:
-            tendine = leggi_tendine(params_tendine(ateneo, gruppo))
-            corsi = tendine.get("postcorso", [])
-        except requests.HTTPError as e:
-            print(f"    gr.{gruppo}: tendine non disponibili (HTTP "
-                  f"{e.response.status_code if e.response is not None else '?'})")
-            corsi = []
+            corsi, dubbio = chiedi_tendine(ateneo, gruppo)
         except Exception as e:
             falliti += 1
             print(f"    gr.{gruppo}: FALLITA la scoperta, si ritenta alla "
                   f"ripartenza -> {type(e).__name__}: {e}")
             time.sleep(pausa)
             continue
+        if dubbio:
+            print(f"    gr.{gruppo}: tendine non disponibili (HTTP {dubbio} per "
+                  f"{TENTATIVI_SCOPERTA} volte) -> chiuso come vuoto, ma segnato "
+                  f"fra le dubbie")
+            conn.execute(
+                "INSERT OR REPLACE INTO _scoperta_dubbia (ateneo, gruppo, codice, quando) "
+                "VALUES (?,?,?,?)",
+                (ateneo, gruppo, dubbio, datetime.now().isoformat(timespec="seconds")))
         for codice, nome in corsi:
             cur = conn.execute(
                 "INSERT OR IGNORE INTO _corsi (ateneo, gruppo, codice, nome) "
@@ -275,6 +340,62 @@ def riepilogo(cartella, ateneo):
     return corsi, fatte, inesistenti, righe, f.stat().st_size
 
 
+def verifica_dubbie(cartella, atenei, pausa):
+    """Ripassa i gruppi chiusi da dubbio e recupera quelli che ora rispondono.
+
+    E' la sonda che il 19 set 2026 e' stata fatta a mano su 98 casi (esito:
+    98 su 98 vuoti veri, zero corsi persi), qui resa un comando. Un gruppo che
+    adesso elenca dei corsi era un guasto travestito da vuoto: si cancella la
+    sua riga da `_scoperta` e la raccolta successiva lo riprende da capo."""
+    tot_dubbie = recuperati = confermati = falliti = 0
+    for ateneo in atenei:
+        f = cartella / f"{ateneo}.sqlite"
+        if not f.exists():
+            continue
+        conn = apri(cartella, ateneo)
+        try:
+            dubbie = list(conn.execute(
+                "SELECT gruppo, codice, quando FROM _scoperta_dubbia "
+                "WHERE ateneo = ? ORDER BY CAST(gruppo AS INT)", (ateneo,)))
+            if not dubbie:
+                continue
+            tot_dubbie += len(dubbie)
+            print(f"  ateneo {ateneo}: {len(dubbie)} gruppi da ripassare")
+            for gruppo, codice, quando in dubbie:
+                try:
+                    corsi, dubbio = chiedi_tendine(ateneo, gruppo)
+                except Exception as e:
+                    falliti += 1
+                    print(f"    gr.{gruppo}: non raggiungibile ora "
+                          f"({type(e).__name__}), lasciato come dubbio")
+                    time.sleep(pausa)
+                    continue
+                if corsi:
+                    recuperati += 1
+                    conn.execute("DELETE FROM _scoperta WHERE ateneo = ? AND gruppo = ?",
+                                 (ateneo, gruppo))
+                    conn.execute("DELETE FROM _scoperta_dubbia WHERE ateneo = ? AND gruppo = ?",
+                                 (ateneo, gruppo))
+                    conn.commit()
+                    print(f"    gr.{gruppo}: RECUPERATO — ora elenca {len(corsi)} corsi. "
+                          f"Riaperto: la prossima raccolta lo rifa'.")
+                else:
+                    confermati += 1
+                    esito = f"HTTP {dubbio}" if dubbio else "tendina vuota"
+                    print(f"    gr.{gruppo}: confermato vuoto ({esito}), era {codice} il {quando}")
+                time.sleep(pausa)
+        finally:
+            conn.close()
+
+    print(f"\n{'=' * 62}")
+    print(f"Dubbie ripassate: {tot_dubbie}   confermate vuote: {confermati}   "
+          f"RECUPERATE: {recuperati}   non raggiungibili: {falliti}")
+    print(f"{'=' * 62}")
+    if recuperati:
+        print("Rilancia la raccolta per riprendere i gruppi riaperti.")
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -294,6 +415,9 @@ def main():
                    help="tetto a orologio: oltre, si ferma pulito")
     p.add_argument("--solo-scoperta", action="store_true",
                    help="elenca i corsi senza scaricarne le schede")
+    p.add_argument("--verifica-dubbie", action="store_true",
+                   help="non raccoglie: ripassa i gruppi chiusi da dubbio "
+                        "(_scoperta_dubbia) e riapre quelli che ora rispondono")
     a = p.parse_args()
 
     # `is not None`, non la verita' della stringa: `--atenei ""` (una variabile
@@ -336,6 +460,12 @@ def main():
     cartella = Path(a.out)
     if not cartella.is_absolute():
         cartella = RADICE / cartella
+    if a.verifica_dubbie:
+        print(f"Verifica dei gruppi chiusi da dubbio — {len(atenei)} atenei, "
+              f"pausa {a.pausa}s")
+        print(f"Cartella: {cartella}\n")
+        return verifica_dubbie(cartella, atenei, a.pausa)
+
     budget = Budget(a.max_minuti)
     print(f"Raccolta corsi — {len(atenei)} atenei, pausa {a.pausa}s, "
           f"tetto {budget.restano()}")
@@ -378,6 +508,22 @@ def main():
     if tot_scoperta_fallita:
         print(f"Gruppi con la scoperta fallita: {tot_scoperta_fallita} "
               f"(si ritentano alla ripartenza)")
+    dubbie = 0
+    for ateneo in atenei:
+        f = cartella / f"{ateneo}.sqlite"
+        if not f.exists():
+            continue
+        c = sqlite3.connect(f"file:{f}?mode=ro", uri=True)
+        try:
+            righe = c.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+                "AND name='_scoperta_dubbia'").fetchone()[0]
+            if righe:
+                dubbie += c.execute("SELECT COUNT(*) FROM _scoperta_dubbia").fetchone()[0]
+        finally:
+            c.close()
+    if dubbie:
+        print(f"Gruppi chiusi da DUBBIO: {dubbie} — ripassali con --verifica-dubbie")
     print(f"{'=' * 62}")
     for ateneo in atenei:
         r = riepilogo(cartella, ateneo)
