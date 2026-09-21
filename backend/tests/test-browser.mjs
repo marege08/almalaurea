@@ -342,7 +342,29 @@ async function main() {
         corsi.ancoraViva === 67544,
       corsi.inMemoria.join(','));
 
-    // --- 8. Console pulita ---
+    // --- 8. I nomi dei corsi (js/nomi-corso.js) ---
+    // La copertura 1:1 contro i database la verifica il generatore
+    // (tools/genera_nomi_corso.py --check); qui si controlla che il modulo
+    // pubblicato si carichi nel browser e dica le cose giuste.
+    const nomi = await valuta(`(async () => {
+      const { NOMI_CORSO } = await import('./js/nomi-corso.js');
+      const { NOMI_ATENEO } = await import('./js/nomi-ateneo.js');
+      const atenei = Object.keys(NOMI_CORSO);
+      return {
+        atenei: atenei.length,
+        soloAteneiVeri: atenei.every((a) => a in NOMI_ATENEO),
+        corsi: atenei.reduce((n, a) => n + Object.keys(NOMI_CORSO[a]).length, 0),
+        acsai: NOMI_CORSO['70026']?.['0580106203100003'] ?? null,
+      };
+    })()`);
+    verifica('i nomi coprono 78 atenei, tutti veri',
+      nomi.atenei === 78 && nomi.soloAteneiVeri, `${nomi.atenei} atenei`);
+    verifica('i nomi coprono 2.607 corsi', nomi.corsi === 2607, `${nomi.corsi} corsi`);
+    verifica('ACSAI ha il suo nome sotto Sapienza',
+      String(nomi.acsai).startsWith('applied computer science and artificial intelligence'),
+      String(nomi.acsai));
+
+    // --- 9. Console pulita ---
     await attendi(300);
     verifica('nessun errore nella console del browser',
       scheda.erroriConsole.length === 0, scheda.erroriConsole.join(' / '));
