@@ -12,6 +12,7 @@ import { processData } from './processData.js';
 import { NOMI_ATENEO } from './nomi-ateneo.js';
 import { NOMI_GRUPPO } from './nomi-gruppo.js';
 import { chiediConfronto } from './ai/connettore.js';
+import { inizializzaSql } from './db-corsi.js';
 
 const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
 
@@ -92,9 +93,9 @@ function mostraErrore(messaggio, errore) {
 
 /** @returns {Promise<object>} In-memory sql.js database. */
 async function caricaDatabase() {
-  const SQL = await initSqlJs({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/${file}`,
-  });
+  // Shared with the per-university course databases (db-corsi.js), so sql.js
+  // is initialized once for the whole page.
+  const SQL = await inizializzaSql();
   const risposta = await fetch('almalaurea.sqlite');
   if (!risposta.ok) {
     throw new Error(`Impossibile scaricare almalaurea.sqlite (HTTP ${risposta.status}). È nella stessa cartella di questa pagina?`);

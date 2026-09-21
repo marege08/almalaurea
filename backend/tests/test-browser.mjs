@@ -296,7 +296,53 @@ async function main() {
     verifica('l\'intestazione mostra anche gli intervistati di occupazione',
       intestazione.includes('intervistati'), intestazione.slice(0, 90));
 
-    // --- 7. Console pulita ---
+    // --- 7. I corsi si caricano un ateneo alla volta (js/db-corsi.js) ---
+    // Si importa lo stesso modulo che usa la pagina (stesso URL, quindi stessa
+    // istanza e stessa cache), e si contano i download veri dalla lista delle
+    // risorse del browser invece di fidarsi di quello che dice il modulo.
+    const scaricatiCorsi = () => valuta(
+      `performance.getEntriesByType('resource')
+         .filter(r => r.name.includes('/corsi/'))
+         .map(r => r.name.split('/').pop())`);
+    const allAvvio = await scaricatiCorsi();
+    verifica('all\'avvio non si scarica nessun database dei corsi',
+      allAvvio.length === 0, allAvvio.join(','));
+
+    const corsi = await valuta(`(async () => {
+      const m = await import('./js/db-corsi.js');
+      const db = await m.caricaAteneoCorsi('70026');
+      const [righe, quanti] = db.exec(
+        'SELECT COUNT(*), COUNT(DISTINCT corso) FROM dati')[0].values[0];
+      const ancora = await m.caricaAteneoCorsi('70026');
+      const [a, b] = await Promise.all([
+        m.caricaAteneoCorsi('70303'), m.caricaAteneoCorsi('70303')]);
+      const rifiutato = await m.caricaAteneoCorsi('../almalaurea')
+        .then(() => '', (e) => e.message);
+      // Sei atenei in memoria, poi si libera tenendo Sapienza «in uso» anche
+      // se e' la meno usata di recente: deve restare aperta.
+      for (const c of ['70121', '70145', '70147', '70141']) await m.caricaAteneoCorsi(c);
+      m.liberaAteneiNonUsati(['70026']);
+      const inMemoria = m.ateneiInMemoria();
+      const [ancoraViva] = db.exec('SELECT COUNT(*) FROM dati')[0].values[0];
+      return { righe, quanti, stessa: db === ancora, condiviso: a === b,
+               rifiutato, inMemoria, ancoraViva, max: m.MAX_ATENEI_APERTI };
+    })()`);
+    verifica('Sapienza carica 67.544 righe su 133 corsi',
+      corsi.righe === 67544 && corsi.quanti === 133, `${corsi.righe} righe, ${corsi.quanti} corsi`);
+    const dopo = await scaricatiCorsi();
+    verifica('il secondo caricamento dello stesso ateneo non riscarica',
+      corsi.stessa && dopo.filter((f) => f === '70026.sqlite').length === 1, dopo.join(','));
+    verifica('due richieste contemporanee fanno un solo download',
+      corsi.condiviso && dopo.filter((f) => f === '70303.sqlite').length === 1, dopo.join(','));
+    verifica('un codice ateneo falso viene rifiutato senza scaricare niente',
+      corsi.rifiutato.includes('sconosciuto') && !dopo.some((f) => f.includes('almalaurea')),
+      corsi.rifiutato);
+    verifica('liberando la memoria restano al massimo 4 atenei, e mai quello in uso',
+      corsi.inMemoria.length === corsi.max && corsi.inMemoria.includes('70026') &&
+        corsi.ancoraViva === 67544,
+      corsi.inMemoria.join(','));
+
+    // --- 8. Console pulita ---
     await attendi(300);
     verifica('nessun errore nella console del browser',
       scheda.erroriConsole.length === 0, scheda.erroriConsole.join(' / '));
