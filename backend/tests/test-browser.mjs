@@ -455,6 +455,73 @@ async function main() {
     verifica('il validatore AI scarta le colonne di tipo corso',
       scartoAi.tenute === 0 && scartoAi.scartate === 1, JSON.stringify(scartoAi));
 
+    // --- 9b. Un download in ritardo non cancella l'errore dell'ateneo scelto ---
+    // Il caso trovato dall'ultrareview del 21 set 2026: scegli A, prima che
+    // finisca passi a B, B fallisce, poi A finisce. L'errore di B deve restare,
+    // anche al ridisegno dopo. Si truccano i download nella pagina: Bologna
+    // (70003) lento, Politecnico di Bari (70048) in errore. Nessuno dei due
+    // deve essere stato aperto prima in questo giro, altrimenti il download
+    // lento non parte e il caso non si crea (Bari non va bene: passando la
+    // colonna a «Corso» dalla sezione 5b, Bari si scarica gia' li').
+    await valuta(`(() => {
+      window.__fetchVero = window.fetch;
+      window.fetch = (url, ...resto) => {
+        const u = String(url);
+        if (u.endsWith('corsi/70003.sqlite')) {
+          return new Promise((ok) => setTimeout(ok, 1500)).then(() => window.__fetchVero(url, ...resto));
+        }
+        if (u.endsWith('corsi/70048.sqlite')) {
+          return new Promise((_, ko) => setTimeout(() => ko(new TypeError('rete finta giu')), 100));
+        }
+        return window.__fetchVero(url, ...resto);
+      };
+      return true;
+    })()`);
+    const bolognaGiaAperta = await valuta(`import('./js/db-corsi.js').then((m) => m.ateneiInMemoria().includes('70003'))`);
+    verifica('il caso del download in ritardo parte davvero (Bologna non ancora aperta)',
+      !bolognaGiaAperta);
+    await scegliNellaPrimaColonna('sel-codice', '70003');
+    await scegliNellaPrimaColonna('sel-codice', '70048');
+    await attendi(2500); // Bologna finisce dopo l'errore del Politecnico.
+    // Un ridisegno qualunque: spegne e riaccende la prima domanda.
+    await valuta(`(() => {
+      const c = document.querySelector('#accordion-filtri input[type=checkbox]');
+      c.click(); c.click(); return true;
+    })()`);
+    const testaDopoErrore = await testaPrimaColonna();
+    verifica('l\'errore dell\'ateneo scelto resta dopo un download in ritardo di un altro',
+      testaDopoErrore.includes('rete finta giu') && !testaDopoErrore.includes('caricamento'),
+      testaDopoErrore.slice(0, 160));
+
+    // Con la rete tornata, riscegliere lo stesso ateneo ritenta davvero.
+    await valuta(`(() => { window.fetch = window.__fetchVero; return true; })()`);
+    await scegliNellaPrimaColonna('sel-codice', '70048');
+    await aspettaTesta('Bari Politecnico', 'Politecnico di Bari caricato al secondo tentativo');
+    const testaRitentata = await testaPrimaColonna();
+    verifica('riscegliendo l\'ateneo fallito il download si ritenta e l\'errore sparisce',
+      !testaRitentata.includes('rete finta'), testaRitentata.slice(0, 160));
+
+    // --- 9c. Un ateneo ancora in download non viene sfrattato dalla memoria ---
+    // Sfrattarlo butterebbe il trasferimento e, tornandoci, lo si riscaricherebbe.
+    const sfratto = await valuta(`(async () => {
+      const m = await import('./js/db-corsi.js');
+      const vero = window.fetch;
+      let sblocca;
+      const cancello = new Promise((ok) => { sblocca = ok; });
+      window.fetch = (url, ...resto) => String(url).endsWith('corsi/70220.sqlite')
+        ? cancello.then(() => vero(url, ...resto)) : vero(url, ...resto);
+      const lento = m.caricaAteneoCorsi('70220');
+      for (const c of ['70097', '70099', '70110', '70137', '70153']) await m.caricaAteneoCorsi(c);
+      m.liberaAteneiNonUsati([]);
+      const tenuto = m.ateneiInMemoria().includes('70220');
+      window.fetch = vero;
+      sblocca();
+      await lento;
+      return { tenuto, inMemoria: m.ateneiInMemoria() };
+    })()`);
+    verifica('liberando la memoria non si sfratta un ateneo ancora in download',
+      sfratto.tenuto, sfratto.inMemoria.join(','));
+
     // --- 10. Console pulita ---
     await attendi(300);
     verifica('nessun errore nella console del browser',

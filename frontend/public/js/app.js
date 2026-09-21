@@ -216,9 +216,11 @@ function codiciOrdinatiPerVisualizzazione(tipo) {
 async function preparaColonnaCorso(stato) {
   const ateneo = stato.ateneo;
   if (ateneoCaricato(ateneo)) return;
+  // The error is cleared by every new user selection (mostra), never here: a
+  // late successful download of a university the user has already left must
+  // not erase the error of the university now selected.
   try {
     await caricaAteneoCorsi(ateneo);
-    stato.errore = undefined;
   } catch (errore) {
     if (stato.ateneo === ateneo) stato.errore = errore.message;
   }
@@ -234,13 +236,15 @@ async function preparaColonnaCorso(stato) {
  * minimal interface meant only to exercise course-level data until the
  * interface is redesigned.
  *
- * @param {string} tipoIniziale - Initial entity type.
- * @param {string} codiceIniziale - Initial entity code (course code for 'corso').
- * @param {string} [ateneoIniziale] - University of the course, for 'corso' only.
+ * Columns always start as a university or group; a column becomes a course
+ * column only through its type selector.
+ *
+ * @param {string} tipoIniziale - Initial entity type ('ateneo' or 'gruppo').
+ * @param {string} codiceIniziale - Initial entity code.
  */
-function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
+function creaColonna(tipoIniziale, codiceIniziale) {
   const id = `colonna-${contatoreColonne++}`;
-  const stato = { id, tipo: tipoIniziale, codice: codiceIniziale, ateneo: ateneoIniziale ?? null };
+  const stato = { id, tipo: tipoIniziale, codice: codiceIniziale, ateneo: null };
   colonne.push(stato);
 
   const contenitore = document.createElement('div');
@@ -317,10 +321,8 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
   });
 
   aggiornaOpzioniCodice();
-  if (tipoIniziale !== 'corso') {
-    selectCodice.value = codiceIniziale;
-    stato.codice = codiceIniziale;
-  }
+  selectCodice.value = codiceIniziale;
+  stato.codice = codiceIniziale;
 
   const btnRimuovi = document.createElement('button');
   btnRimuovi.type = 'button';
@@ -335,7 +337,6 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
 
   contenitore.append(selectTipo, selectCodice, selectCorso, btnRimuovi);
   elColonneSchede.appendChild(contenitore);
-  if (stato.tipo === 'corso') preparaColonnaCorso(stato);
 }
 
 elBtnAggiungiColonna.addEventListener('click', () => {

@@ -119,8 +119,10 @@ export function caricaAteneoCorsi(codice) {
  * MAX_ATENEI_APERTI open.
  *
  * Closing never happens during a load, only here: the interface calls this
- * after rendering with the codes it is displaying, so a database still in use
- * is never closed, even when more than MAX_ATENEI_APERTI are displayed at once.
+ * whenever it redraws, with the codes it is displaying, so a database still in
+ * use is never closed, even when more than MAX_ATENEI_APERTI are displayed at
+ * once. A download still in progress is not evicted either: dropping it would
+ * waste the transfer and force a new one if the user returns to it.
  *
  * @param {Iterable<string>} codiciInUso - University codes currently displayed.
  */
@@ -128,7 +130,7 @@ export function liberaAteneiNonUsati(codiciInUso) {
   const inUso = new Set(codiciInUso);
   for (const [codice, promessa] of cache) {
     if (cache.size <= MAX_ATENEI_APERTI) break;
-    if (inUso.has(codice)) continue;
+    if (inUso.has(codice) || !aperti.has(codice)) continue;
     cache.delete(codice);
     aperti.delete(codice);
     promessa.then((db) => db.close(), () => {});

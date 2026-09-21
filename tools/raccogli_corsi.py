@@ -513,7 +513,9 @@ def main():
         f = cartella / f"{ateneo}.sqlite"
         if not f.exists():
             continue
-        c = sqlite3.connect(f"file:{f}?mode=ro", uri=True)
+        # as_uri() come in riepilogo(): un '?', '#' o '%' nel percorso
+        # aprirebbe un altro file.
+        c = sqlite3.connect(f"{f.resolve().as_uri()}?mode=ro", uri=True)
         try:
             righe = c.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
