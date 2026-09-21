@@ -51,6 +51,11 @@ const CODICI_VALIDI = new Set(Object.keys(NOMI_ATENEO));
 // access re-inserts the entry, so the first entries are the least recently used.
 const cache = new Map();
 
+// code -> Database, only for downloads that have finished and are still
+// cached. The comparison table renders synchronously, so it needs to know
+// without awaiting whether a university is ready.
+const aperti = new Map();
+
 /**
  * Downloads and opens one university's course database.
  *
@@ -94,9 +99,16 @@ export function caricaAteneoCorsi(codice) {
     cache.delete(codice);
   } else {
     promessa = scaricaAteneo(codice);
-    promessa.catch(() => {
-      if (cache.get(codice) === promessa) cache.delete(codice);
-    });
+    promessa.then(
+      (db) => {
+        // An entry evicted while downloading is closed by the eviction and
+        // must not reappear as ready.
+        if (cache.get(codice) === promessa) aperti.set(codice, db);
+      },
+      () => {
+        if (cache.get(codice) === promessa) cache.delete(codice);
+      }
+    );
   }
   cache.set(codice, promessa);
   return promessa;
@@ -118,8 +130,50 @@ export function liberaAteneiNonUsati(codiciInUso) {
     if (cache.size <= MAX_ATENEI_APERTI) break;
     if (inUso.has(codice)) continue;
     cache.delete(codice);
+    aperti.delete(codice);
     promessa.then((db) => db.close(), () => {});
   }
+}
+
+/**
+ * Returns a university's course database if it has finished downloading.
+ *
+ * @param {string} codice - University code.
+ * @returns {object|null} Open sql.js database, or null while not yet available.
+ */
+export function ateneoCaricato(codice) {
+  return aperti.get(codice) ?? null;
+}
+
+/**
+ * Reads the rows of one course sheet.
+ *
+ * Course rows carry both a university and a group code, so the aggregate
+ * query (one of the two empty) never matches them: courses are selected by
+ * their own code instead. The definition filter follows the same rule as the
+ * aggregate query: '' and 'condivisa' rows are valid under every definition.
+ *
+ * @param {object} db - Course database of the course's university.
+ * @param {string} corso - Course code.
+ * @param {string} definizione - Selected definition of "employed".
+ * @returns {object[]} Rows with the columns the comparison table reads.
+ */
+export function interrogaCorso(db, corso, definizione) {
+  const stmt = db.prepare(
+    `SELECT indagine, categoria, indicatore, valore, nota, valore_raw,
+            numero_laureati, numero_compilatori
+     FROM dati
+     WHERE corso = :corso
+       AND definizione IN ('', 'condivisa', :definizione)`
+  );
+  const righe = [];
+  try {
+    stmt.bind({ ':corso': corso, ':definizione': definizione });
+    while (stmt.step()) righe.push(stmt.getAsObject());
+  } finally {
+    stmt.free();
+  }
+  return righe;
 }
 
 /** @returns {string[]} Codes of the cached universities, least recently used first. */

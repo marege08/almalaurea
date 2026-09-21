@@ -364,7 +364,98 @@ async function main() {
       String(nomi.acsai).startsWith('applied computer science and artificial intelligence'),
       String(nomi.acsai));
 
-    // --- 9. Console pulita ---
+    // --- 9. Una colonna di tipo corso, scelta dai menu come farebbe un utente ---
+    // La prima colonna diventa ACSAI (Sapienza). E' il caso che giustifica la
+    // soglia: profilo su 52 compilatori (sopra 40), occupazione su 22
+    // intervistati (sotto). Sapienza e' gia' in memoria dalla sezione 7.
+    const scegliNellaPrimaColonna = (classe, valore) => valuta(`(() => {
+      const s = document.querySelector('.colonna-scheda .${classe}');
+      s.value = ${JSON.stringify(valore)};
+      s.dispatchEvent(new Event('change'));
+      return s.value;
+    })()`);
+    const testaPrimaColonna = () =>
+      valuta(`document.querySelectorAll('#tabella-head th')[1].textContent`);
+    const aspettaTesta = (testo, descrizione) => aspettaInPagina(valuta,
+      `document.querySelectorAll('#tabella-head th')[1].textContent.includes(${JSON.stringify(testo)}) &&
+       !document.querySelectorAll('#tabella-head th')[1].textContent.includes('caricamento')`,
+      descrizione);
+
+    await scegliNellaPrimaColonna('sel-tipo', 'corso');
+    await scegliNellaPrimaColonna('sel-codice', '70026');
+    await scegliNellaPrimaColonna('sel-corso', '0580106203100003');
+    await aspettaTesta('applied computer science', 'colonna ACSAI caricata');
+    const testaAcsai = await testaPrimaColonna();
+    verifica('la colonna corso porta il nome del corso e il suo ateneo',
+      testaAcsai.includes('applied computer science') && testaAcsai.includes('Roma Sapienza'),
+      testaAcsai.slice(0, 120));
+
+    // Le celle della prima colonna, divise per indagine leggendo il tooltip,
+    // che nomina l'indagine su cui si basa ogni valore.
+    const celleAcsai = () => valuta(`(() => {
+      const celle = [...document.querySelectorAll('#tabella-body tr')]
+        .map(tr => tr.cells[1]).filter(td => td && td.title);
+      const di = (indagine) => celle.filter(td => td.title.includes('(indagine ' + indagine + ')'));
+      const piccole = (lista) => lista.filter(td => td.classList.contains('cella-campione-piccolo')).length;
+      const occ = di('occupazione'), pro = di('profilo');
+      return { conValore: celle.filter(td => td.classList.contains('cella-valore')).length,
+               occ: occ.length, occPiccole: piccole(occ),
+               pro: pro.length, proPiccole: piccole(pro),
+               testo: celle.map(td => td.textContent).join('|'),
+               legenda: !document.getElementById('legenda-campione').classList.contains('nascosto') };
+    })()`);
+    const acsai = await celleAcsai();
+    verifica('le celle di ACSAI si riempiono di valori', acsai.conValore > 100,
+      `${acsai.conValore} celle con valore`);
+    verifica('occupazione di ACSAI (22 intervistati) tutta segnata come campione piccolo',
+      acsai.occ > 0 && acsai.occPiccole === acsai.occ, `${acsai.occPiccole}/${acsai.occ}`);
+    verifica('profilo di ACSAI (52 compilatori) mai segnato',
+      acsai.pro > 0 && acsai.proPiccole === 0, `${acsai.proPiccole}/${acsai.pro}`);
+    verifica('la legenda del campione piccolo compare', acsai.legenda);
+
+    // Il numero preciso, come per Bari nella sezione 5b: un testo di colonna
+    // diverso non basta, perche' cambiando definizione cambiano anche le
+    // domande visibili, e passerebbe anche con la query dei corsi senza filtro.
+    // Per ACSAI la riga vale 31,8 con ampia e 40,9 con restrittiva.
+    const valoreAcsaiCon = async (definizione) => {
+      await valuta(`(() => {
+        const s = document.getElementById('sel-definizione');
+        s.value = ${JSON.stringify(definizione)};
+        s.dispatchEvent(new Event('change')); return true;
+      })()`);
+      await attendi(300);
+      return valoreDellaRiga(ETICHETTA);
+    };
+    const acsaiAmpia = await valoreAcsaiCon('ampia');
+    const acsaiRestrittiva = await valoreAcsaiCon('restrittiva');
+    verifica('per ACSAI «mai lavorato» vale 31,8 con ampia e 40,9 con restrittiva',
+      acsaiAmpia === '31,8' && acsaiRestrittiva === '40,9',
+      `${acsaiAmpia} / ${acsaiRestrittiva}`);
+
+    // Un ateneo mai aperto prima: Roma Tre, ing. informatica e dell'IA.
+    const primaDiRomaTre = (await scaricatiCorsi()).length;
+    await scegliNellaPrimaColonna('sel-codice', '70117');
+    await scegliNellaPrimaColonna('sel-corso', '0580706200800002');
+    await aspettaTesta('ingegneria informatica e dell', 'colonna Roma Tre caricata');
+    const dopoRomaTre = await scaricatiCorsi();
+    verifica('scegliendo un corso di Roma Tre si scarica solo Roma Tre, una volta',
+      dopoRomaTre.length === primaDiRomaTre + 1 && dopoRomaTre.at(-1) === '70117.sqlite',
+      dopoRomaTre.slice(primaDiRomaTre).join(','));
+    const testaRomaTre = await testaPrimaColonna();
+    verifica('la colonna mostra il suo ateneo, Roma Tre',
+      testaRomaTre.includes('Roma Tre'), testaRomaTre.slice(0, 120));
+
+    // Lo strato AI non conosce ancora i corsi: una colonna «corso» proposta
+    // da un modello deve essere scartata dal validatore, non arrivare alla UI.
+    const scartoAi = await valuta(`(async () => {
+      const { validaQuery } = await import('./js/ai/validatore.js');
+      const q = validaQuery({ colonne: [{ tipo: 'corso', codice: '0580106203100003' }], domande: [] });
+      return { tenute: q.colonne.length, scartate: q.scartati.colonne.length };
+    })()`);
+    verifica('il validatore AI scarta le colonne di tipo corso',
+      scartoAi.tenute === 0 && scartoAi.scartate === 1, JSON.stringify(scartoAi));
+
+    // --- 10. Console pulita ---
     await attendi(300);
     verifica('nessun errore nella console del browser',
       scheda.erroriConsole.length === 0, scheda.erroriConsole.join(' / '));

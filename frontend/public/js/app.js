@@ -12,15 +12,39 @@ import { processData } from './processData.js';
 import { NOMI_ATENEO } from './nomi-ateneo.js';
 import { NOMI_GRUPPO } from './nomi-gruppo.js';
 import { chiediConfronto } from './ai/connettore.js';
-import { inizializzaSql } from './db-corsi.js';
+import { NOMI_CORSO } from './nomi-corso.js';
+import {
+  inizializzaSql,
+  caricaAteneoCorsi,
+  ateneoCaricato,
+  interrogaCorso,
+  liberaAteneiNonUsati,
+} from './db-corsi.js';
 
 const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
+
+// --- Small-sample threshold ---
+// Below this number of respondents a percentage is unstable: with thirty
+// respondents, one case more or less moves the value by more than three
+// points, and the difference between two columns becomes noise. Cells based on
+// a sample smaller than the threshold are de-emphasized and explained in their
+// tooltip instead of being displayed like every other cell.
+//
+// Aggregate university and group data never fall below the threshold: the
+// smallest sample in the published database has 61 respondents. The mechanism
+// is intended for course-level data, where respondents regularly number only a
+// few dozen, and keeping it as a single constant makes it adjustable in one
+// place.
+const SOGLIA_CAMPIONE_PICCOLO = 40;
 
 // --- In-memory UI state ---
 let db = null;
 let codiciAteneo = [];
 let codiciGruppo = [];
-let colonne = []; // Entries have the shape { id, tipo: 'ateneo'|'gruppo', codice }.
+// Entries have the shape { id, tipo: 'ateneo'|'gruppo'|'corso', codice }; a
+// 'corso' column also stores its university in `ateneo`, since course codes
+// are looked up inside that university's database.
+let colonne = [];
 let contatoreColonne = 0;
 
 // --- Definition of "employed" (only the `occupazione` employment outcomes survey) ---
@@ -75,6 +99,7 @@ const elSelDefinizione = document.getElementById('sel-definizione');
 const elNotaDefinizione = document.getElementById('nota-definizione');
 const elTabellaHead = document.getElementById('tabella-head');
 const elTabellaBody = document.getElementById('tabella-body');
+const elLegendaCampione = document.getElementById('legenda-campione');
 
 /**
  * Displays an error message and optionally logs the underlying error.
@@ -153,6 +178,19 @@ function etichettaCodice(tipo, codice) {
 }
 
 /**
+ * Returns the display label for a comparison column.
+ *
+ * @param {{tipo:string,codice:string,ateneo?:string}} colonna - Sheet selection.
+ * @returns {string} Display label.
+ */
+function etichettaColonna(colonna) {
+  if (colonna.tipo === 'corso') {
+    return NOMI_CORSO[colonna.ateneo]?.[colonna.codice] ?? `Corso ${colonna.codice}`;
+  }
+  return etichettaCodice(colonna.tipo, colonna.codice);
+}
+
+/**
  * Returns codes sorted by display label.
  *
  * @param {string} tipo - Entity type.
@@ -167,14 +205,42 @@ function codiciOrdinatiPerVisualizzazione(tipo) {
 }
 
 /**
+ * Downloads the university of a course column, then redraws the table.
+ *
+ * The table renders synchronously, so a course column first appears with a
+ * loading note and is drawn again here once its data is available. A failed
+ * download is shown in the column header instead of as empty cells.
+ *
+ * @param {object} stato - Course column state.
+ */
+async function preparaColonnaCorso(stato) {
+  const ateneo = stato.ateneo;
+  if (ateneoCaricato(ateneo)) return;
+  try {
+    await caricaAteneoCorsi(ateneo);
+    stato.errore = undefined;
+  } catch (errore) {
+    if (stato.ateneo === ateneo) stato.errore = errore.message;
+  }
+  // The user may have removed the column or picked another university while
+  // the download was running; only a still-current selection is redrawn.
+  if (colonne.includes(stato) && stato.ateneo === ateneo) renderTabella();
+}
+
+/**
  * Creates a comparison column.
  *
+ * NOTE: the course selector (type "Corso", then university, then course) is a
+ * minimal interface meant only to exercise course-level data until the
+ * interface is redesigned.
+ *
  * @param {string} tipoIniziale - Initial entity type.
- * @param {string} codiceIniziale - Initial entity code.
+ * @param {string} codiceIniziale - Initial entity code (course code for 'corso').
+ * @param {string} [ateneoIniziale] - University of the course, for 'corso' only.
  */
-function creaColonna(tipoIniziale, codiceIniziale) {
+function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
   const id = `colonna-${contatoreColonne++}`;
-  const stato = { id, tipo: tipoIniziale, codice: codiceIniziale };
+  const stato = { id, tipo: tipoIniziale, codice: codiceIniziale, ateneo: ateneoIniziale ?? null };
   colonne.push(stato);
 
   const contenitore = document.createElement('div');
@@ -182,37 +248,79 @@ function creaColonna(tipoIniziale, codiceIniziale) {
   contenitore.dataset.id = id;
 
   const selectTipo = document.createElement('select');
-  selectTipo.innerHTML = `<option value="ateneo">Ateneo</option><option value="gruppo">Gruppo</option>`;
+  selectTipo.className = 'sel-tipo';
+  selectTipo.innerHTML =
+    '<option value="ateneo">Ateneo</option><option value="gruppo">Gruppo</option>' +
+    '<option value="corso">Corso</option>';
   selectTipo.value = tipoIniziale;
 
+  // University or group; for a course column, the course's university.
   const selectCodice = document.createElement('select');
+  selectCodice.className = 'sel-codice';
+  const selectCorso = document.createElement('select');
+  selectCorso.className = 'sel-corso';
+
+  function aggiornaOpzioniCorso() {
+    const corsi = Object.entries(NOMI_CORSO[stato.ateneo] ?? {});
+    // Options are built as DOM nodes: course names come from an external
+    // source and are never interpreted as HTML.
+    selectCorso.replaceChildren(...corsi.map(([c, nome]) => new Option(nome, c)));
+    if (!corsi.some(([c]) => c === stato.codice)) stato.codice = corsi[0]?.[0] ?? '';
+    selectCorso.value = stato.codice;
+  }
 
   function aggiornaOpzioniCodice() {
-    const codici = codiciOrdinatiPerVisualizzazione(selectTipo.value);
+    const perCorso = selectTipo.value === 'corso';
+    const tipoLista = perCorso ? 'ateneo' : selectTipo.value;
+    const codici = codiciOrdinatiPerVisualizzazione(tipoLista);
     selectCodice.innerHTML = codici
-      .map((c) => `<option value="${c}">${etichettaCodice(selectTipo.value, c)}</option>`)
+      .map((c) => `<option value="${c}">${etichettaCodice(tipoLista, c)}</option>`)
       .join('');
-    if (codici.includes(stato.codice)) {
-      selectCodice.value = stato.codice;
+    const voluto = perCorso ? stato.ateneo : stato.codice;
+    const scelto = codici.includes(voluto) ? voluto : codici[0] ?? '';
+    selectCodice.value = scelto;
+    if (perCorso) {
+      stato.ateneo = scelto;
+      aggiornaOpzioniCorso();
     } else {
-      stato.codice = codici[0] ?? '';
-      selectCodice.value = stato.codice;
+      stato.codice = scelto;
+      stato.ateneo = null;
     }
+    selectCorso.hidden = !perCorso;
+  }
+
+  function mostra() {
+    stato.errore = undefined;
+    renderTabella();
+    if (stato.tipo === 'corso') preparaColonnaCorso(stato);
   }
 
   selectTipo.addEventListener('change', () => {
+    // Switching from a university to "Corso" keeps that university.
+    if (selectTipo.value === 'corso' && stato.tipo === 'ateneo') stato.ateneo = stato.codice;
     stato.tipo = selectTipo.value;
     aggiornaOpzioniCodice();
-    renderTabella();
+    mostra();
   });
   selectCodice.addEventListener('change', () => {
-    stato.codice = selectCodice.value;
-    renderTabella();
+    if (stato.tipo === 'corso') {
+      stato.ateneo = selectCodice.value;
+      aggiornaOpzioniCorso();
+    } else {
+      stato.codice = selectCodice.value;
+    }
+    mostra();
+  });
+  selectCorso.addEventListener('change', () => {
+    stato.codice = selectCorso.value;
+    mostra();
   });
 
   aggiornaOpzioniCodice();
-  selectCodice.value = codiceIniziale;
-  stato.codice = codiceIniziale;
+  if (tipoIniziale !== 'corso') {
+    selectCodice.value = codiceIniziale;
+    stato.codice = codiceIniziale;
+  }
 
   const btnRimuovi = document.createElement('button');
   btnRimuovi.type = 'button';
@@ -225,8 +333,9 @@ function creaColonna(tipoIniziale, codiceIniziale) {
     renderTabella();
   });
 
-  contenitore.append(selectTipo, selectCodice, btnRimuovi);
+  contenitore.append(selectTipo, selectCodice, selectCorso, btnRimuovi);
   elColonneSchede.appendChild(contenitore);
+  if (stato.tipo === 'corso') preparaColonnaCorso(stato);
 }
 
 elBtnAggiungiColonna.addEventListener('click', () => {
@@ -402,12 +511,52 @@ function chiave(indagine, categoria, indicatore) {
 }
 
 /**
- * Queries the data for one sheet.
+ * Converts the rows of one sheet into cell values and sample sizes.
  *
- * @param {{tipo:string,codice:string}} colonna - Sheet selection.
+ * Aggregate and course sheets share this conversion, so keys, sample sizes
+ * and the small-sample marker behave identically at both levels.
+ *
+ * @param {object[]} righe - Rows read from a sheet.
  * @returns {{mappa:Map,numerosita:Map}} Sheet data and sample sizes.
  */
+function costruisciScheda(righe) {
+  const mappa = new Map();
+  // Keep sample sizes per survey because reading them from an arbitrary row
+  // of an unordered query would make them depend on insertion order.
+  const numerosita = new Map();
+
+  for (const riga of righe) {
+    mappa.set(chiave(riga.indagine, riga.categoria, riga.indicatore), {
+      valore: riga.valore,
+      nota: riga.nota,
+      valore_raw: riga.valore_raw,
+    });
+    if (!numerosita.has(riga.indagine)) {
+      numerosita.set(riga.indagine, {
+        laureati: riga.numero_laureati,
+        compilatori: riga.numero_compilatori,
+      });
+    }
+  }
+  return { mappa, numerosita };
+}
+
+/**
+ * Queries the data for one sheet.
+ *
+ * A course column whose university is still downloading returns no data and
+ * `inCaricamento: true`; the column is drawn again when the download ends.
+ *
+ * @param {{tipo:string,codice:string,ateneo?:string}} colonna - Sheet selection.
+ * @returns {{mappa:Map,numerosita:Map,inCaricamento?:boolean}} Sheet data and sample sizes.
+ */
 function interrogaScheda(colonna) {
+  if (colonna.tipo === 'corso') {
+    const dbAteneo = ateneoCaricato(colonna.ateneo);
+    if (!dbAteneo) return { ...costruisciScheda([]), inCaricamento: true };
+    return costruisciScheda(interrogaCorso(dbAteneo, colonna.codice, definizioneScelta));
+  }
+
   const colonnaFiltro = colonna.tipo === 'ateneo' ? 'ateneo' : 'gruppo';
   const altraColonna = colonna.tipo === 'ateneo' ? 'gruppo' : 'ateneo';
 
@@ -425,32 +574,95 @@ function interrogaScheda(colonna) {
        AND definizione IN ('', 'condivisa', :definizione)`
   );
   stmt.bind({ ':codice': colonna.codice, ':definizione': definizioneScelta });
-
-  const mappa = new Map();
-  // Keep sample sizes per survey because reading them from an arbitrary row
-  // of an unordered query would make them depend on insertion order.
-  const numerosita = new Map();
-
-  while (stmt.step()) {
-    const riga = stmt.getAsObject();
-    mappa.set(chiave(riga.indagine, riga.categoria, riga.indicatore), {
-      valore: riga.valore,
-      nota: riga.nota,
-      valore_raw: riga.valore_raw,
-    });
-    if (!numerosita.has(riga.indagine)) {
-      numerosita.set(riga.indagine, {
-        laureati: riga.numero_laureati,
-        compilatori: riga.numero_compilatori,
-      });
-    }
-  }
+  const righe = [];
+  while (stmt.step()) righe.push(stmt.getAsObject());
   stmt.free();
 
-  return { mappa, numerosita };
+  return costruisciScheda(righe);
 }
 
 // --- 5. Rendering the comparison table ---
+
+/**
+ * Formats a count with Italian digit grouping.
+ *
+ * @param {number|null|undefined} n - Count to format.
+ * @returns {string} Formatted count, or an em dash when the count is missing.
+ */
+const formattaNumero = (n) => (n != null ? n.toLocaleString('it-IT') : '—');
+
+// AlmaLaurea's own terms for respondents in each survey: graduate profile
+// survey respondents complete a questionnaire, while employment outcomes
+// survey respondents are interviewed by telephone. The labels quote
+// AlmaLaurea's wording.
+const NOME_RISPONDENTI = {
+  profilo: 'compilatori del questionario',
+  occupazione: 'intervistati',
+};
+
+/**
+ * Returns the sample on which one table cell is based.
+ *
+ * The sample is the respondent count of the survey that the row belongs to,
+ * not of the column as a whole, because the two surveys cover different
+ * populations. Respondents are the true denominator of a percentage; when
+ * that count is missing, the graduate count is used as the best available
+ * upper bound and the tooltip names it as such.
+ *
+ * @param {Map} numerosita - Sample sizes by survey.
+ * @param {string} indagine - Survey of the row.
+ * @returns {{indagine: string, numero: number, nome: string, laureati: (number|null)}|null}
+ *   Sample description, or null when no count is available.
+ */
+function campioneDellaRiga(numerosita, indagine) {
+  const n = numerosita.get(indagine);
+  if (!n) return null;
+  if (n.compilatori != null) {
+    return {
+      indagine,
+      numero: n.compilatori,
+      nome: NOME_RISPONDENTI[indagine] ?? 'rispondenti',
+      laureati: n.laureati,
+    };
+  }
+  if (n.laureati != null) {
+    return { indagine, numero: n.laureati, nome: 'laureati', laureati: null };
+  }
+  return null;
+}
+
+/**
+ * Returns whether a sample is below the small-sample threshold.
+ *
+ * @param {object|null} campione - Sample returned by campioneDellaRiga().
+ * @returns {boolean} True when the sample is known and below SOGLIA_CAMPIONE_PICCOLO.
+ */
+function campionePiccolo(campione) {
+  return campione != null && campione.numero < SOGLIA_CAMPIONE_PICCOLO;
+}
+
+/**
+ * Builds the tooltip line that states the sample behind a value.
+ *
+ * Below the threshold the text also explains why the sample size matters.
+ *
+ * @param {object} campione - Sample returned by campioneDellaRiga().
+ * @returns {string} Tooltip text.
+ */
+function testoCampione(campione) {
+  const base = `${formattaNumero(campione.numero)} ${campione.nome}`;
+  const suLaureati =
+    campione.laureati != null ? ` su ${formattaNumero(campione.laureati)} laureati` : '';
+  if (campionePiccolo(campione)) {
+    return (
+      `Campione piccolo: ${base}${suLaureati} (indagine ${campione.indagine}), ` +
+      `sotto la soglia di ${SOGLIA_CAMPIONE_PICCOLO}. Su cos\u00ec pochi rispondenti ` +
+      'una percentuale \u00e8 instabile: leggi il valore con prudenza e non fidarti ' +
+      'delle differenze piccole fra colonne.'
+    );
+  }
+  return `Campione: ${base}${suLaureati} (indagine ${campione.indagine}).`;
+}
 
 // Show one sample-size row for each survey present in the table. One number is
 // insufficient because the surveys cover different populations; assigning the
@@ -463,13 +675,26 @@ function interrogaScheda(colonna) {
  * @param {string[]} indaginiMostrate - Surveys displayed in the table.
  * @returns {HTMLElement} Column header.
  */
-function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate) {
+function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate, inCaricamento) {
   const contenitore = document.createElement('div');
   const riga1 = document.createElement('div');
-  riga1.textContent = etichettaCodice(colonna.tipo, colonna.codice);
+  riga1.textContent = etichettaColonna(colonna);
   contenitore.appendChild(riga1);
 
-  const it = (n) => (n != null ? n.toLocaleString('it-IT') : '—');
+  // A course name alone does not say where the course is taught.
+  const sottotitolo =
+    colonna.tipo === 'corso'
+      ? colonna.errore ?? (inCaricamento
+        ? `${etichettaCodice('ateneo', colonna.ateneo)} · caricamento dei corsi…`
+        : etichettaCodice('ateneo', colonna.ateneo))
+      : null;
+  if (sottotitolo) {
+    const riga = document.createElement('small');
+    riga.className = 'sottotitolo-colonna';
+    riga.textContent = sottotitolo;
+    contenitore.appendChild(riga);
+  }
+
   for (const indagine of indaginiMostrate) {
     const n = numerosita.get(indagine);
     if (!n || n.laureati == null) continue;
@@ -479,8 +704,8 @@ function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate) {
     riga.style.display = 'block';
     riga.textContent =
       indagine === 'occupazione'
-        ? `${it(n.laureati)} laureati · ${it(n.compilatori)} intervistati`
-        : `${it(n.laureati)} laureati`;
+        ? `${formattaNumero(n.laureati)} laureati · ${formattaNumero(n.compilatori)} intervistati`
+        : `${formattaNumero(n.laureati)} laureati`;
     contenitore.appendChild(riga);
   }
   return contenitore;
@@ -503,10 +728,16 @@ function creaCellaTesto(testo, classe) {
 /**
  * Creates a table cell for a data value.
  *
+ * The sample size appears in the cell tooltip as well as in the column header,
+ * so a reader can see the sample behind a value without tracing its survey.
+ * Writing it as visible text would double the numbers in the table, so the
+ * visual marker is reserved for cells below the threshold.
+ *
  * @param {object|undefined} infoValore - Value information.
+ * @param {object|null} campione - Sample returned by campioneDellaRiga().
  * @returns {HTMLElement} Value cell.
  */
-function creaCellaValore(infoValore) {
+function creaCellaValore(infoValore, campione) {
   const td = document.createElement('td');
   if (!infoValore) {
     td.textContent = '—';
@@ -518,14 +749,46 @@ function creaCellaValore(infoValore) {
   td.className = infoValore.valore !== null && infoValore.valore !== undefined
     ? 'cella-valore'
     : 'cella-nota';
-  td.title = `Valore originale AlmaLaurea: ${infoValore.valore_raw}`;
+  if (campionePiccolo(campione)) td.classList.add('cella-campione-piccolo');
+
+  const righe = [];
+  if (campione) righe.push(testoCampione(campione));
+  righe.push(`Valore originale AlmaLaurea: ${infoValore.valore_raw}`);
+  td.title = righe.join('\n');
   return td;
+}
+
+/**
+ * Shows or hides the small-sample legend below the table.
+ *
+ * The legend appears only when at least one cell carries the marker, so the
+ * table gains no explanatory line for a case that does not occur. The text
+ * reads the threshold from the constant so that it cannot drift out of sync.
+ *
+ * @param {number} quante - Number of cells below the threshold.
+ */
+function aggiornaLegendaCampione(quante) {
+  if (!elLegendaCampione) return;
+  elLegendaCampione.classList.toggle('nascosto', quante === 0);
+  if (quante === 0) return;
+  elLegendaCampione.textContent =
+    `\u2731 Valore basato su meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: ` +
+    'campione piccolo, differenze piccole fra colonne non sono significative. ' +
+    'Passa il mouse su una cella per la numerosit\u00e0 esatta.';
 }
 
 /** Renders the comparison table from the current selections and database. */
 function renderTabella() {
   elTabellaHead.innerHTML = '';
   elTabellaBody.innerHTML = '';
+  // Recount on every render: the columns and questions, and therefore the
+  // cells below the threshold, can change.
+  let sottoSoglia = 0;
+  aggiornaLegendaCampione(0);
+
+  // Release course databases no column shows any more. Universities in use
+  // are never closed, so this is safe before the queries below.
+  liberaAteneiNonUsati(colonne.filter((c) => c.tipo === 'corso').map((c) => c.ateneo));
 
   if (colonne.length === 0) {
     const tr = document.createElement('tr');
@@ -558,9 +821,11 @@ function renderTabella() {
   thDomanda.className = 'colonna-domanda';
   thDomanda.textContent = 'Domanda';
   trHead.appendChild(thDomanda);
-  for (const { colonna, numerosita } of datiPerColonna) {
+  for (const { colonna, numerosita, inCaricamento } of datiPerColonna) {
     const th = document.createElement('th');
-    th.appendChild(formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate));
+    th.appendChild(
+      formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate, inCaricamento)
+    );
     trHead.appendChild(th);
   }
   elTabellaHead.appendChild(trHead);
@@ -592,8 +857,11 @@ function renderTabella() {
         tr.className = 'riga-domanda-intestazione';
         tr.appendChild(creaCellaTesto(voce.label, 'colonna-domanda'));
         const k = chiave(voce.indagine, voce.categoria, voce.indicatori[0]);
-        for (const { mappa } of datiPerColonna) {
-          tr.appendChild(creaCellaValore(mappa.get(k)));
+        for (const { mappa, numerosita } of datiPerColonna) {
+          const campione = campioneDellaRiga(numerosita, voce.indagine);
+          const cella = creaCellaValore(mappa.get(k), campione);
+          if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
+          tr.appendChild(cella);
         }
         elTabellaBody.appendChild(tr);
       } else {
@@ -612,14 +880,19 @@ function renderTabella() {
           tr.className = 'riga-indicatore';
           tr.appendChild(creaCellaTesto(indicatore, 'colonna-domanda'));
           const k = chiave(voce.indagine, voce.categoria, indicatore);
-          for (const { mappa } of datiPerColonna) {
-            tr.appendChild(creaCellaValore(mappa.get(k)));
+          for (const { mappa, numerosita } of datiPerColonna) {
+            const campione = campioneDellaRiga(numerosita, voce.indagine);
+            const cella = creaCellaValore(mappa.get(k), campione);
+            if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
+            tr.appendChild(cella);
           }
           elTabellaBody.appendChild(tr);
         }
       }
     }
   }
+
+  aggiornaLegendaCampione(sottoSoglia);
 }
 
 // --- 6. Startup ---

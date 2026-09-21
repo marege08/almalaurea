@@ -139,6 +139,17 @@ main {
 
 .colonna-scheda .rimuovi-colonna:hover { color: var(--avviso-testo); }
 
+/* Minimal course selector, pending the interface redesign: course names run
+   up to 187 characters, so the menu is capped instead of stretching the row. */
+.colonna-scheda .sel-corso { max-width: 22rem; }
+
+/* University of a course column, below the course name in its header. */
+.sottotitolo-colonna {
+  display: block;
+  font-weight: 400;
+  color: var(--testo-tenue);
+}
+
 .pulsante-secondario {
   font: inherit;
   background: var(--accento-chiaro);
@@ -250,6 +261,37 @@ td.cella-valore { font-variant-numeric: tabular-nums; }
 td.cella-nota {
   color: var(--testo-tenue);
   font-style: italic;
+}
+
+/* Every cell with a value carries its sample size in the title attribute;
+   the help cursor is the only visual cue and takes no space. */
+td.cella-valore,
+td.cella-nota { cursor: help; }
+
+/* Small sample (below SOGLIA_CAMPIONE_PICCOLO in app.js): the value is
+   de-emphasized, not hidden. A muted colour with a dotted underline stays
+   visible while scanning a column without drawing excessive attention.
+   The asterisk is deliberately CSS-generated content: it is not part of the
+   cell's textContent, so code that reads the table (tests, copy and paste,
+   exports) still sees only the number. */
+td.cella-campione-piccolo {
+  color: var(--testo-tenue);
+  text-decoration: underline dotted var(--avviso-testo);
+  text-underline-offset: 0.22em;
+}
+
+td.cella-campione-piccolo::after {
+  content: '\2009\2731';
+  color: var(--avviso-testo);
+  font-size: 0.75em;
+  vertical-align: super;
+}
+
+.legenda-campione {
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--testo-tenue);
 }
 
 /* --- Footer --- */
