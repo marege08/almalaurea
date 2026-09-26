@@ -273,15 +273,18 @@ tr.riga-indicatore td.colonna-domanda {
 
 td.cella-valore { font-variant-numeric: tabular-nums; }
 
-td.cella-nota {
+td.cella-nota,
+td.cella-solo-corso {
   color: var(--testo-tenue);
   font-style: italic;
 }
 
 /* Every cell with a value carries its sample size in the title attribute;
-   the help cursor is the only visual cue and takes no space. */
+   the help cursor is the only visual cue and takes no space. A course-only
+   cell carries its explanation there too. */
 td.cella-valore,
-td.cella-nota { cursor: help; }
+td.cella-nota,
+td.cella-solo-corso { cursor: help; }
 
 /* Small sample (below SOGLIA_CAMPIONE_PICCOLO in app.js): the value is
    de-emphasized, not hidden. A muted colour with a dotted underline stays

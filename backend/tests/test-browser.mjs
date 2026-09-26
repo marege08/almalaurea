@@ -25,6 +25,8 @@
 import { spawn } from 'node:child_process';
 import { setTimeout as attendi } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const RADICE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -151,6 +153,11 @@ async function main() {
 
   let chrome = null;
   let scheda = null;
+  // A fresh Chrome profile on every run, deleted at the end. A profile kept
+  // between runs keeps its HTTP cache too, and on 26 Sep 2026 it served a
+  // stale config-filtri.js: the test was checking yesterday's code, not
+  // today's.
+  const PROFILO = mkdtempSync(path.join(tmpdir(), 'almalaurea-test-chrome-'));
   try {
     console.log(`Provo: ${INDIRIZZO}\n`);
     if (server) await aspettaPorta(`http://127.0.0.1:${PORTA_HTTP}/index.html`).catch(() => {});
@@ -162,7 +169,7 @@ async function main() {
           `--remote-debugging-port=${PORTA_CDP}`,
           '--no-first-run',
           '--no-default-browser-check',
-          '--user-data-dir=/tmp/almalaurea-test-chrome',
+          `--user-data-dir=${PROFILO}`,
           'about:blank',
         ], { stdio: 'ignore' });
         break;
@@ -210,6 +217,29 @@ async function main() {
       sel.scelta === 'ampia', sel.scelta);
     verifica('la nota spiega la definizione scelta',
       sel.nota.includes('anche di formazione'), sel.nota.slice(0, 60));
+
+
+    // Le domande solo-corso (soloCorso in config-filtri.js): la casella e le
+    // righe della tabella, lette dal DOM. La riga si cerca per etichetta
+    // esatta; «Lavorano e sono iscritti...» esiste solo in quella domanda.
+    const RIGA_SOLO_CORSO = 'Lavorano e sono iscritti ad una laurea di secondo livello';
+    const statoSoloCorso = () => valuta(`(() => {
+      const chk = document.getElementById('chk-condizione_occupazionale_e_formativa');
+      const riga = [...document.querySelectorAll('#tabella-body tr')]
+        .find(tr => tr.cells[0]?.textContent.trim() === ${JSON.stringify(RIGA_SOLO_CORSO)});
+      return { casella: !!chk, visibile: !!chk && !chk.closest('label').hidden,
+               celle: riga ? [...riga.cells].slice(1).map(td => td.textContent.trim()) : null,
+               titolo: riga ? riga.cells[riga.cells.length - 1].title : '',
+               nota: document.getElementById('nota-definizione').textContent };
+    })()`);
+
+    // --- 3b. Senza colonne corso le domande solo-corso non si vedono ---
+    const senzaCorsi = await statoSoloCorso();
+    verifica('senza colonne corso le domande solo-corso restano nascoste',
+      senzaCorsi.casella && !senzaCorsi.visibile && senzaCorsi.celle === null,
+      JSON.stringify(senzaCorsi).slice(0, 120));
+    verifica('la nota della definizione non conta le domande solo-corso',
+      senzaCorsi.nota.includes('delle 22 domande'), senzaCorsi.nota.slice(-90));
 
     // --- 4. Cambiare definizione cambia le domande consultabili ---
     const primaDelCambio = await valuta(`(() => {
@@ -439,6 +469,47 @@ async function main() {
     await invia('Emulation.clearDeviceMetricsOverride');
     await attendi(300);
 
+    // --- 9a-bis. Con una colonna corso le domande solo-corso compaiono ---
+    // La prima colonna e' ACSAI, la seconda un ateneo. ACSAI, definizione
+    // ampia: 31,8% lavora ed e' iscritto alla magistrale. L'ateneo non ha la
+    // domanda (mescola tutti i tipi di laurea) e lo dice, invece di un «—».
+    await valuta(`(() => {
+      const s = document.getElementById('sel-definizione');
+      s.value = 'ampia'; s.dispatchEvent(new Event('change')); return true;
+    })()`);
+    await attendi(300);
+    const conCorso = await statoSoloCorso();
+    verifica('con una colonna corso le domande solo-corso compaiono nei filtri',
+      conCorso.visibile, JSON.stringify(conCorso).slice(0, 120));
+    verifica('ACSAI: 31,8% lavora ed e\' iscritto alla magistrale; l\'ateneo dice «solo per i corsi»',
+      conCorso.celle?.[0] === '31,8' && conCorso.celle?.[1] === 'solo per i corsi' &&
+      conCorso.titolo.includes('tutti i tipi di laurea'),
+      JSON.stringify(conCorso.celle));
+    // Stessa regola sul percorso delle domande a voce singola, che in app.js
+    // e' un ramo a parte: «Altra laurea di primo livello», ACSAI 1,9.
+    const vocesingola = await valuta(`(() => {
+      const riga = [...document.querySelectorAll('#tabella-body tr')]
+        .find(tr => tr.cells[0]?.textContent.trim() === 'Altra laurea di primo livello');
+      return riga ? [...riga.cells].slice(1).map(td => td.textContent.trim()) : null;
+    })()`);
+    verifica('anche a voce singola: ACSAI 1,9, l\'ateneo «solo per i corsi»',
+      vocesingola?.[0] === '1,9' && vocesingola?.[1] === 'solo per i corsi',
+      JSON.stringify(vocesingola));
+    verifica('con una colonna corso la nota conta anche la domanda solo-corso',
+      conCorso.nota.includes('delle 27 domande'), conCorso.nota.slice(-90));
+
+    // Tolta la colonna corso, spariscono di nuovo; poi ACSAI torna com'era.
+    await scegliNellaPrimaColonna('sel-tipo', 'ateneo');
+    await attendi(300);
+    const tornatoAteneo = await statoSoloCorso();
+    verifica('togliendo la colonna corso le domande solo-corso spariscono di nuovo',
+      !tornatoAteneo.visibile && tornatoAteneo.celle === null,
+      JSON.stringify(tornatoAteneo).slice(0, 120));
+    await scegliNellaPrimaColonna('sel-tipo', 'corso');
+    await scegliNellaPrimaColonna('sel-codice', '70026');
+    await scegliNellaPrimaColonna('sel-corso', '0580106203100003');
+    await aspettaTesta('applied computer science', 'colonna ACSAI di nuovo caricata');
+
     // Il numero preciso, come per Bari nella sezione 5b: un testo di colonna
     // diverso non basta, perche' cambiando definizione cambiano anche le
     // domande visibili, e passerebbe anche con la query dei corsi senza filtro.
@@ -555,8 +626,15 @@ async function main() {
 
   } finally {
     scheda?.chiudi();
-    chrome?.kill();
+    if (chrome && chrome.exitCode === null) {
+      // Wait for Chrome to exit before deleting its profile, or it may still
+      // be writing into the directory being removed.
+      const uscito = new Promise((ok) => chrome.once('exit', ok));
+      chrome.kill();
+      await Promise.race([uscito, attendi(5000)]);
+    }
     server?.kill();
+    rmSync(PROFILO, { recursive: true, force: true });
   }
 
   console.log(`\n${passati} passati, ${falliti} falliti`);

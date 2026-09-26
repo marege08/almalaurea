@@ -45,6 +45,14 @@
  * (la categoria, quando presente, e' di per se' univoca nel dataset:
  * verificato che nessuna categoria si ripete in sezioni diverse).
  *
+ * DOMANDE SOLO-CORSO (`soloCorso: true`): esistono nelle schede dei singoli
+ * corsi e non in quelle di atenei e gruppi. Gli aggregati mettono insieme
+ * tutti i tipi di laurea (tipo_corso = ''), i corsi sono lauree di primo
+ * livello (tipo_corso = 'L'), e le domande su cosa succede DOPO la triennale
+ * (iscrizione alla magistrale, lavora/studia) hanno senso solo li'. La UI le
+ * mostra solo quando il confronto contiene almeno una colonna corso; la
+ * proprieta' manca, invece di valere false, su tutte le altre voci.
+ *
  * Nota su una stranezza ereditata dai dati originali, NON corretta a
  * mano: nella sezione 1 la categoria "Eta' alla laurea (%)" include
  * anche "Cittadini stranieri (%)" come indicatore. E' cosi' nella
@@ -190,6 +198,20 @@ export const CONFIG_FILTRI = {
         "da 105 a 110",
         "meno di 100"
       ]
+    },
+    {
+      "id": "altra_laurea_di_primo_livello",
+      "label": "Altra laurea di primo livello",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "9. PROSPETTIVE DI STUDIO",
+      "categoria": "",
+      "indicatori": [
+        "Altra laurea di primo livello"
+      ],
+      "soloCorso": true
     },
     {
       "id": "altre_attivita_di_qualificazione_professionale",
@@ -359,6 +381,40 @@ export const CONFIG_FILTRI = {
       "indicatori": [
         "Tirocinio, praticantato"
       ]
+    },
+    {
+      "id": "ateneo_a_cui_intendono_iscriversi_per_100_che_intendono_iscriversi_ad_una_laurea",
+      "label": "Ateneo a cui intendono iscriversi(per 100 che intendono iscriversi ad una laurea magistrale biennale)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "9. PROSPETTIVE DI STUDIO",
+      "categoria": "Ateneo a cui intendono iscriversi(per 100 che intendono iscriversi ad una laurea magistrale biennale)",
+      "indicatori": [
+        "Altro Ateneo del Centro",
+        "Altro Ateneo del Nord",
+        "Altro Ateneo del Sud-Isole",
+        "Altro Ateneo italiano telematico",
+        "Ateneo estero",
+        "Stesso Ateneo della laurea di primo livello"
+      ],
+      "soloCorso": true
+    },
+    {
+      "id": "motivo_principale_dell_iscrizione_ad_un_corso_di_laurea_magistrale_biennale_per",
+      "label": "Motivo principale dell'iscrizione ad un corso di laurea magistrale biennale(per 100 che intendono iscriversi ad una laurea magistrale biennale)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "9. PROSPETTIVE DI STUDIO",
+      "categoria": "Motivo principale dell'iscrizione ad un corso di laurea magistrale biennale(per 100 che intendono iscriversi ad una laurea magistrale biennale)",
+      "indicatori": [
+        "Per completare/arricchire la formazione",
+        "Si tratta di una scelta \"quasi obbligata\" per poter accedere al mondo del lavoro"
+      ],
+      "soloCorso": true
     }
   ],
   "Lavoro e Futuro": [
@@ -1053,6 +1109,79 @@ export const CONFIG_FILTRI = {
   ],
   "Dopo la Laurea": [
     {
+      "id": "iscrizione_dopo_la_laurea_di_primo_livello_ad_un_altro_corso_di_laurea",
+      "label": "Iscrizione, dopo la laurea di primo livello, ad un altro corso di laurea (%)",
+      "indagine": "occupazione",
+      "definizioni": [
+        "condivisa"
+      ],
+      "sezione": "2a. Formazione di secondo livello",
+      "categoria": "Iscrizione, dopo la laurea di primo livello, ad un altro corso di laurea (%)",
+      "indicatori": [
+        "Mai iscritti ad un corso di laurea di primo o secondo livello",
+        "Si sono iscritti ad un corso di laurea di primo livello",
+        "Si sono iscritti ad un corso di laurea di secondo livello",
+        "Sono attualmente iscritti"
+      ],
+      "soloCorso": true
+    },
+    {
+      "id": "motivi_dell_iscrizione_ad_un_corso_di_laurea_di_secondo_livello",
+      "label": "Motivi dell'iscrizione ad un corso di laurea di secondo livello (%)",
+      "indagine": "occupazione",
+      "definizioni": [
+        "condivisa"
+      ],
+      "sezione": "2a. Formazione di secondo livello",
+      "categoria": "Motivi dell'iscrizione ad un corso di laurea di secondo livello (%)",
+      "indicatori": [
+        "Per migliorare la propria formazione culturale",
+        "Per migliorare le condizioni dell'attuale lavoro",
+        "Per migliorare le possibilità di trovare lavoro",
+        "Perché hanno cercato lavoro ma non l'hanno trovato",
+        "Perché è necessaria per trovare lavoro"
+      ],
+      "soloCorso": true
+    },
+    {
+      "id": "motivi_della_non_iscrizione_ad_un_altro_corso_di_laurea",
+      "label": "Motivi della non iscrizione ad un altro corso di laurea (%)",
+      "indagine": "occupazione",
+      "definizioni": [
+        "condivisa"
+      ],
+      "sezione": "2a. Formazione di secondo livello",
+      "categoria": "Motivi della non iscrizione ad un altro corso di laurea (%)",
+      "indicatori": [
+        "Altro motivo",
+        "Mancanza di un corso nell’area disciplinare di interesse",
+        "Motivi economici",
+        "Motivi lavorativi",
+        "Motivi personali",
+        "Non interessati per altri motivi",
+        "Non interessati perché intenzionati a frequentare altra formazione post-laurea"
+      ],
+      "soloCorso": true
+    },
+    {
+      "id": "natura_della_laurea_di_secondo_livello_rispetto_alla_laurea_di_primo_livello",
+      "label": "Natura della laurea di secondo livello rispetto alla laurea di primo livello (%)",
+      "indagine": "occupazione",
+      "definizioni": [
+        "condivisa"
+      ],
+      "sezione": "2a. Formazione di secondo livello",
+      "categoria": "Natura della laurea di secondo livello rispetto alla laurea di primo livello (%)",
+      "indicatori": [
+        "Rappresenta il proseguimento 'naturale'",
+        "Rientra in un settore disciplinare diverso",
+        "Rientra nel medesimo settore disciplinare pur non rappresentando il proseguimento 'naturale'",
+        "Soddisfazione per gli studi di secondo livello intrapresi (medie, scala 1-10)",
+        "Stesso ateneo di conseguimento della laurea di primo livello (%)"
+      ],
+      "soloCorso": true
+    },
+    {
       "id": "hanno_partecipato_ad_almeno_un_attivita_di_formazione_post_laurea",
       "label": "Hanno partecipato ad almeno un'attività di formazione post-laurea (%)",
       "indagine": "occupazione",
@@ -1100,6 +1229,25 @@ export const CONFIG_FILTRI = {
         "Non lavorano ma cercano",
         "Quota che non lavora, non cerca ma è impegnata in un corso universitario/praticantato (%)"
       ]
+    },
+    {
+      "id": "condizione_occupazionale_e_formativa",
+      "label": "Condizione occupazionale e formativa (%)",
+      "indagine": "occupazione",
+      "definizioni": [
+        "ampia",
+        "restrittiva"
+      ],
+      "sezione": "3. Condizione occupazionale",
+      "categoria": "Condizione occupazionale e formativa (%)",
+      "indicatori": [
+        "Lavorano e non sono iscritti ad una laurea di secondo livello",
+        "Lavorano e sono iscritti ad una laurea di secondo livello",
+        "Non lavorano e sono iscritti ad una laurea di secondo livello",
+        "Non lavorano, non sono iscritti ad una laurea di secondo livello e non cercano",
+        "Non lavorano, non sono iscritti ad una laurea di secondo livello ma cercano"
+      ],
+      "soloCorso": true
     },
     {
       "id": "esperienze_di_lavoro_post_laurea",

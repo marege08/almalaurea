@@ -73,9 +73,18 @@ const TESTO_DEFINIZIONE = {
 // definition. The four questions available under only one definition are thus
 // hidden instead of rendered as dashes.
 function voceDisponibile(voce) {
-  return voce.definizioni.some(
+  return voceNelConfronto(voce) && voce.definizioni.some(
     (d) => d === '' || d === 'condivisa' || d === definizioneScelta
   );
+}
+
+// Course-only questions (`soloCorso`, see config-filtri.js) ask first-level
+// graduates what they did after the degree; universities and groups mix all
+// degree types and have no answer. They join the comparison only when at least
+// one course column is present, instead of adding rows every column leaves
+// empty.
+function voceNelConfronto(voce) {
+  return !voce.soloCorso || colonne.some((c) => c.tipo === 'corso');
 }
 
 // Map entry IDs to { voce, macro } for quick CONFIG_FILTRI lookup from a
@@ -449,7 +458,10 @@ const MACRO_OCCUPAZIONE = ORDINE_MACRO.find((m) =>
 /** Updates the explanation and available-question count for the definition. */
 function aggiornaNotaDefinizione() {
   if (!elNotaDefinizione || !MACRO_OCCUPAZIONE) return;
-  const voci = CONFIG_FILTRI[MACRO_OCCUPAZIONE];
+  // The denominator leaves out course-only questions while no course column
+  // exists: they do not depend on the definition, and counting them would
+  // report as hidden by the definition questions it does not hide.
+  const voci = CONFIG_FILTRI[MACRO_OCCUPAZIONE].filter(voceNelConfronto);
   const disponibili = voci.filter(voceDisponibile).length;
   const spiegazione = TESTO_DEFINIZIONE[definizioneScelta] ?? '';
   elNotaDefinizione.textContent =
@@ -760,6 +772,22 @@ function creaCellaValore(infoValore, campione) {
 }
 
 /**
+ * Creates the cell of a course-only question in a university or group column.
+ *
+ * A dash would read as missing data; the question simply does not exist for
+ * a mixed-degree aggregate, and the tooltip says why.
+ *
+ * @returns {HTMLElement} Explanatory cell.
+ */
+function creaCellaSoloCorso() {
+  const td = creaCellaTesto('solo per i corsi', 'cella-solo-corso');
+  td.title =
+    'Domanda posta solo ai laureati di primo livello: AlmaLaurea la pubblica per ' +
+    'il singolo corso, non per atenei e gruppi, che mettono insieme tutti i tipi di laurea.';
+  return td;
+}
+
+/**
  * Shows or hides the small-sample legend below the table.
  *
  * The legend appears only when at least one cell carries the marker, so the
@@ -786,6 +814,11 @@ function renderTabella() {
   // cells below the threshold, can change.
   let sottoSoglia = 0;
   aggiornaLegendaCampione(0);
+
+  // Course-only questions follow the columns: adding or removing a course
+  // column shows or hides them in the filters too, with their counters.
+  aggiornaVisibilitaVoci();
+  aggiornaNotaDefinizione();
 
   // Release course databases no column shows any more. Universities in use
   // are never closed, so this is safe before the queries below.
@@ -858,7 +891,11 @@ function renderTabella() {
         tr.className = 'riga-domanda-intestazione';
         tr.appendChild(creaCellaTesto(voce.label, 'colonna-domanda'));
         const k = chiave(voce.indagine, voce.categoria, voce.indicatori[0]);
-        for (const { mappa, numerosita } of datiPerColonna) {
+        for (const { colonna, mappa, numerosita } of datiPerColonna) {
+          if (voce.soloCorso && colonna.tipo !== 'corso') {
+            tr.appendChild(creaCellaSoloCorso());
+            continue;
+          }
           const campione = campioneDellaRiga(numerosita, voce.indagine);
           const cella = creaCellaValore(mappa.get(k), campione);
           if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
@@ -881,7 +918,11 @@ function renderTabella() {
           tr.className = 'riga-indicatore';
           tr.appendChild(creaCellaTesto(indicatore, 'colonna-domanda'));
           const k = chiave(voce.indagine, voce.categoria, indicatore);
-          for (const { mappa, numerosita } of datiPerColonna) {
+          for (const { colonna, mappa, numerosita } of datiPerColonna) {
+            if (voce.soloCorso && colonna.tipo !== 'corso') {
+              tr.appendChild(creaCellaSoloCorso());
+              continue;
+            }
             const campione = campioneDellaRiga(numerosita, voce.indagine);
             const cella = creaCellaValore(mappa.get(k), campione);
             if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;

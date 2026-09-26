@@ -31,6 +31,7 @@ README.
 """
 
 import argparse
+import glob
 import json
 import re
 import sqlite3
@@ -40,6 +41,9 @@ from pathlib import Path
 
 RADICE = Path(__file__).resolve().parent.parent
 DB = RADICE / "frontend" / "public" / "almalaurea.sqlite"
+# Course databases, one per university (Phase 4). They contain questions that
+# the aggregate database lacks; see leggi_combinazioni_corsi().
+CORSI = RADICE / "frontend" / "public" / "corsi"
 USCITA = RADICE / "frontend" / "public" / "js" / "config-filtri.js"
 
 # Official sections from AlmaLaurea sheets grouped into macro-categories
@@ -67,6 +71,7 @@ SEZIONE_A_MACRO = {
     "9. PROSPETTIVE DI STUDIO": "Successo e Percorso",
     "10. PROSPETTIVE DI LAVORO": "Lavoro e Futuro",
     # employment outcomes survey
+    "2a. Formazione di secondo livello": "Dopo la Laurea",
     "2b. Formazione post-laurea": "Dopo la Laurea",
     "3. Condizione occupazionale": "Dopo la Laurea",
     "4. Ingresso nel mercato del lavoro": "Dopo la Laurea",
@@ -141,6 +146,14 @@ INTESTAZIONE = """/**
  * (la categoria, quando presente, e' di per se' univoca nel dataset:
  * verificato che nessuna categoria si ripete in sezioni diverse).
  *
+ * DOMANDE SOLO-CORSO (`soloCorso: true`): esistono nelle schede dei singoli
+ * corsi e non in quelle di atenei e gruppi. Gli aggregati mettono insieme
+ * tutti i tipi di laurea (tipo_corso = ''), i corsi sono lauree di primo
+ * livello (tipo_corso = 'L'), e le domande su cosa succede DOPO la triennale
+ * (iscrizione alla magistrale, lavora/studia) hanno senso solo li'. La UI le
+ * mostra solo quando il confronto contiene almeno una colonna corso; la
+ * proprieta' manca, invece di valere false, su tutte le altre voci.
+ *
  * Nota su una stranezza ereditata dai dati originali, NON corretta a
  * mano: nella sezione 1 la categoria "Eta' alla laurea (%)" include
  * anche "Cittadini stranieri (%)" come indicatore. E' cosi' nella
@@ -200,7 +213,36 @@ def leggi_combinazioni(db_path):
         conn.close()
 
 
-def costruisci_config(combinazioni):
+def leggi_combinazioni_corsi(cartella):
+    """Read the distinct combinations of every course database.
+
+    Course sheets are first-level degrees only, and AlmaLaurea asks their
+    graduates questions that mixed-degree aggregates cannot carry (whether
+    they enrolled in a master's degree, whether they work and study). Those
+    questions exist nowhere else, so the course databases must be read too.
+
+    Args:
+        cartella: Directory holding one ``<university>.sqlite`` per university.
+
+    Returns:
+        The union of the distinct rows of all course databases, as a set.
+    """
+    combinazioni = set()
+    for percorso in sorted(glob.glob(str(cartella / "*.sqlite"))):
+        conn = sqlite3.connect(f"{Path(percorso).as_uri()}?mode=ro", uri=True)
+        try:
+            combinazioni.update(
+                conn.execute(
+                    "SELECT DISTINCT indagine, definizione, sezione, categoria, "
+                    "indicatore FROM dati"
+                ).fetchall()
+            )
+        finally:
+            conn.close()
+    return combinazioni
+
+
+def costruisci_config(combinazioni, combinazioni_corsi=()):
     """Group combinations into questions and assign macro-categories.
 
     Return ``(config, problemi)``. Problems do not stop generation; they are
@@ -210,6 +252,9 @@ def costruisci_config(combinazioni):
     Args:
         combinazioni: Distinct survey, definition, section, category, and
             indicator tuples.
+        combinazioni_corsi: The same tuples read from the course databases.
+            Those absent from ``combinazioni`` form course-only questions,
+            marked ``soloCorso``.
 
     Returns:
         A configuration mapping and a list of detected problems.
@@ -226,7 +271,15 @@ def costruisci_config(combinazioni):
     # sections remain here until they are assigned to a macro-category.
     non_mappate = {}
 
-    for indagine, definizione, sezione, categoria, indicatore in combinazioni:
+    aggregate = set(combinazioni)
+    solo_corso = set(combinazioni_corsi) - aggregate
+    # Question key -> (combinations seen in aggregates, in courses only).
+    # A question must be entirely one or the other: a mix would show an
+    # aggregate column with holes that look like missing data.
+    provenienza = {}
+
+    for tupla in sorted(aggregate | solo_corso):
+        indagine, definizione, sezione, categoria, indicatore = tupla
         vista = indagine_di_sezione.setdefault(sezione, indagine)
         if vista != indagine:
             problemi.append(
@@ -254,6 +307,18 @@ def costruisci_config(combinazioni):
         )
         voce["indicatori"].add(indicatore)
         voce["definizioni"].add(definizione)
+        conta = provenienza.setdefault(chiave, [0, 0])
+        conta[1 if tupla in solo_corso else 0] += 1
+
+    for chiave, (in_aggregati, in_corsi) in provenienza.items():
+        if in_aggregati == 0:
+            domande[chiave]["soloCorso"] = True
+        elif in_corsi:
+            problemi.append(
+                f"la domanda {domande[chiave]['label']!r} ha {in_corsi} voci solo "
+                f"nei corsi e {in_aggregati} anche negli aggregati: nelle colonne "
+                f"ateneo e gruppo quelle voci sembrerebbero dati mancanti"
+            )
 
     config = {macro: [] for macro in ORDINE_MACRO}
     for voce in domande.values():
@@ -323,7 +388,12 @@ def main():
     if not DB.exists():
         sys.exit(f"Database non trovato: {DB}")
 
-    config, problemi = costruisci_config(leggi_combinazioni(DB))
+    if not CORSI.is_dir():
+        sys.exit(f"Cartella dei corsi non trovata: {CORSI}")
+
+    config, problemi = costruisci_config(
+        leggi_combinazioni(DB), leggi_combinazioni_corsi(CORSI)
+    )
     testo = rendi_javascript(config)
 
     for p in problemi:
@@ -331,7 +401,8 @@ def main():
 
     totale = sum(len(v) for v in config.values())
     riepilogo = ", ".join(f"{m}: {len(config[m])}" for m in ORDINE_MACRO)
-    print(f"{totale} domande ({riepilogo})")
+    solo = sum(1 for v in config.values() for voce in v if voce.get("soloCorso"))
+    print(f"{totale} domande ({riepilogo}); {solo} solo-corso")
 
     attuale = USCITA.read_text(encoding="utf-8") if USCITA.exists() else None
     if argomenti.check:

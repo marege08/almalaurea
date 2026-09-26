@@ -24,6 +24,9 @@ export function tutteLeDomande() {
   const out = [];
   for (const macro of Object.keys(CONFIG_FILTRI)) {
     for (const v of CONFIG_FILTRI[macro]) {
+      // Course-only questions stay out: the AI cannot create course columns
+      // yet, so it could only select questions every column leaves empty.
+      if (v.soloCorso) continue;
       out.push({ id: v.id, label: v.label, macro });
     }
   }
