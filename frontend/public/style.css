@@ -109,9 +109,15 @@ main {
   margin-bottom: 1rem;
 }
 
+/* Capped at the panel width: the course menu's options run up to 187
+   characters, and without a cap the row would size itself on them and
+   widen the whole page on a phone. */
 .colonna-scheda {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  max-width: 100%;
+  box-sizing: border-box;
   gap: 0.5rem;
   background: var(--bg);
   border: 1px solid var(--bordo);
@@ -121,6 +127,8 @@ main {
 
 .colonna-scheda select {
   font: inherit;
+  max-width: 100%;
+  min-width: 0;
   padding: 0.3rem 0.4rem;
   border-radius: 5px;
   border: 1px solid var(--bordo);
@@ -141,7 +149,7 @@ main {
 
 /* Minimal course selector, pending the interface redesign: course names run
    up to 187 characters, so the menu is capped instead of stretching the row. */
-.colonna-scheda .sel-corso { max-width: 22rem; }
+.colonna-scheda .sel-corso { max-width: min(22rem, 100%); }
 
 /* University of a course column, below the course name in its header. */
 .sottotitolo-colonna {
@@ -226,6 +234,13 @@ thead th {
   color: var(--accento);
   position: sticky;
   top: 0;
+}
+
+/* Column headers wrap: a course name (up to 187 characters) on a single line
+   would push the other columns out of view. Values keep nowrap. */
+thead th:not(.colonna-domanda) {
+  white-space: normal;
+  min-width: 10rem;
 }
 
 thead th.colonna-domanda {

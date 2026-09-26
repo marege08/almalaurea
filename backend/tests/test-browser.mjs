@@ -119,7 +119,7 @@ async function apriScheda(indirizzo) {
     return r.result.value;
   };
 
-  return { valuta, erroriConsole, chiudi: () => ws.close() };
+  return { valuta, invia, erroriConsole, chiudi: () => ws.close() };
 }
 
 // Aspetta una condizione NELLA pagina (il caricamento del DB non e' istantaneo).
@@ -172,7 +172,7 @@ async function main() {
 
     await aspettaPorta(`http://127.0.0.1:${PORTA_CDP}/json/version`);
     scheda = await apriScheda(INDIRIZZO);
-    const { valuta } = scheda;
+    const { valuta, invia } = scheda;
 
     // Prima che il documento esista, poi che l'app sia effettivamente accesa.
     await aspettaInPagina(valuta, `document.readyState === 'complete'`, 'pagina caricata');
@@ -412,6 +412,32 @@ async function main() {
     verifica('profilo di ACSAI (52 compilatori) mai segnato',
       acsai.pro > 0 && acsai.proPiccole === 0, `${acsai.proPiccole}/${acsai.pro}`);
     verifica('la legenda del campione piccolo compare', acsai.legenda);
+
+    // --- 9a. Una colonna corso non rompe l'impaginazione ---
+    // Il nome del corso arriva a 187 caratteri. Su una riga sola, nel rilievo
+    // del 26 set 2026, spingeva la seconda colonna fuori dal riquadro della
+    // tabella (desktop), e i tre menu in fila allargavano la pagina a 816 px
+    // su un telefono da 390. Finestra fissata, poi restituita com'era.
+    const finestra = async (larghezza, mobile) => {
+      await invia('Emulation.setDeviceMetricsOverride',
+        { width: larghezza, height: 900, deviceScaleFactor: 1, mobile });
+      await attendi(300);
+    };
+    await finestra(1400, false);
+    const larghezze = await valuta(`(() => {
+      const sc = document.querySelector('.scroll-tabella');
+      return { colonne: document.querySelectorAll('#tabella-head th').length - 1,
+               tabella: sc.scrollWidth, riquadro: sc.clientWidth };
+    })()`);
+    verifica('su desktop le colonne del confronto stanno tutte nel riquadro',
+      larghezze.colonne >= 2 && larghezze.tabella <= larghezze.riquadro,
+      `${larghezze.colonne} colonne, tabella ${larghezze.tabella} px su ${larghezze.riquadro}`);
+    await finestra(390, true);
+    const pagina = await valuta(`[document.documentElement.scrollWidth, innerWidth]`);
+    verifica('su un telefono da 390 px la pagina non si allarga',
+      pagina[0] <= 390 && pagina[1] <= 390, `pagina ${pagina[0]} px, finestra ${pagina[1]}`);
+    await invia('Emulation.clearDeviceMetricsOverride');
+    await attendi(300);
 
     // Il numero preciso, come per Bari nella sezione 5b: un testo di colonna
     // diverso non basta, perche' cambiando definizione cambiano anche le
