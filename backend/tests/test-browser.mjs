@@ -192,6 +192,26 @@ async function main() {
     const celle = await valuta(`document.querySelectorAll('#tabella-body td').length`);
     verifica('la tabella di confronto si popola', celle > 500, `${celle} celle`);
 
+    // --- 1b. Il cruscotto «In sintesi» legge gli stessi dati della tabella ---
+    // All'avvio le colonne sono Marche Politecnica (70001) e Bari (70002).
+    // «Tasso di occupazione › Totale» vale 64,6 e 59,7; la retribuzione di
+    // Bari 1.304 euro (definizione ampia).
+    const sintesi = await valuta(`(() => {
+      const carte = [...document.querySelectorAll('#griglia-sintesi .kpi')];
+      const valori = (id) => [...document.querySelectorAll(
+        '#griglia-sintesi .kpi[data-indicatore="' + id + '"] .kpi-valore')].map(v => v.textContent);
+      return { carte: carte.length,
+               occupati: valori('occupati'), retribuzione: valori('retribuzione'),
+               domanda: document.querySelector('#griglia-sintesi .kpi[data-indicatore="occupati"] .kpi-domanda')?.textContent };
+    })()`);
+    verifica('il cruscotto mostra 6 schede', sintesi.carte === 6, `${sintesi.carte} schede`);
+    verifica('«Quanti lavorano»: 64,6% Marche Politecnica, 59,7% Bari',
+      sintesi.occupati[0] === '64,6%' && sintesi.occupati[1] === '59,7%', sintesi.occupati.join(' | '));
+    verifica('«Quanto si guadagna»: Bari 1.304 €',
+      sintesi.retribuzione[1] === '1.304 €', sintesi.retribuzione.join(' | '));
+    verifica('sotto il titolo c\'e\' il nome esatto della domanda AlmaLaurea',
+      sintesi.domanda === 'Tasso di occupazione › Totale', String(sintesi.domanda));
+
     // --- 2. Le macro-categorie sono quelle attese ---
     const macro = await valuta(
       `[...document.querySelectorAll('#accordion-filtri details')]
@@ -618,6 +638,148 @@ async function main() {
     })()`);
     verifica('liberando la memoria non si sfratta un ateneo ancora in download',
       sfratto.tenuto, sfratto.inMemoria.join(','));
+
+    // --- 9d. La scheda del corso ---
+    // Si cerca «informatica pisa» come farebbe un utente e si apre il corso
+    // L-31 di Pisa. Valori attesi, definizione ampia: occupati 62,0 (corso),
+    // 62,7 (ateneo di Pisa), 71,9 (area Informatica e Tecnologie ICT).
+    await valuta(`(() => {
+      const s = document.getElementById('sel-definizione');
+      s.value = 'ampia'; s.dispatchEvent(new Event('change'));
+      location.hash = '#scheda';
+      const t = document.getElementById('cerca-corso-testo');
+      t.value = 'informatica pisa'; t.dispatchEvent(new Event('input'));
+      return true;
+    })()`);
+    const risultato = await valuta(`(() => {
+      const a = [...document.querySelectorAll('#cerca-corso-risultati a')]
+        .find(a => a.getAttribute('href') === '#scheda/70024/0500106203100002');
+      if (a) a.click();
+      return { trovato: !!a, vistaScheda: !document.getElementById('vista-scheda').classList.contains('nascosto') };
+    })()`);
+    verifica('la ricerca «informatica pisa» trova informatica (L-31) di Pisa', risultato.trovato);
+    verifica('il link della vista porta alla scheda', risultato.vistaScheda);
+
+    const valoriScheda = async (indicatore) => valuta(`(() => {
+      const riga = document.querySelector('.paragone-riga[data-indicatore="${indicatore}"]');
+      return riga ? [...riga.querySelectorAll('.paragone-numero')].map(v => v.textContent) : null;
+    })()`);
+    await aspettaInPagina(valuta,
+      `document.querySelector('.scheda-titolo')?.textContent === 'informatica (L-31)' &&
+       document.querySelector('.paragone-riga[data-indicatore="occupati"]')`,
+      'scheda di informatica (L-31) di Pisa');
+    const occupatiPisa = await valoriScheda('occupati');
+    verifica('scheda Pisa: occupati 62,0% corso, 62,7% ateneo, 71,9% area',
+      JSON.stringify(occupatiPisa) === JSON.stringify(['62,0%', '62,7%', '71,9%']),
+      JSON.stringify(occupatiPisa));
+    const retribuzionePisa = await valoriScheda('retribuzione');
+    verifica('scheda Pisa: retribuzione 1.525 €, 1.447 €, 1.608 €',
+      JSON.stringify(retribuzionePisa) === JSON.stringify(['1.525 €', '1.447 €', '1.608 €']),
+      JSON.stringify(retribuzionePisa));
+    const testaPisa = await valuta(`(() => ({
+      etichette: document.querySelector('.scheda-etichette').textContent,
+      righe: document.querySelectorAll('.paragone-riga[data-indicatore]').length,
+      stella: document.querySelectorAll('#scheda-corso .valore-campione-piccolo').length,
+    }))()`);
+    verifica('la scheda dice ateneo, tipo di laurea e area',
+      testaPisa.etichette.includes('Pisa') && testaPisa.etichette.includes('Laurea di primo livello') &&
+      testaPisa.etichette.includes('Informatica e Tecnologie ICT'), testaPisa.etichette);
+    verifica('la scheda ha 8 indicatori', testaPisa.righe === 8, `${testaPisa.righe} righe`);
+    verifica('Pisa (108 intervistati, 169 compilatori) non ha valori segnati', testaPisa.stella === 0,
+      `${testaPisa.stella} segnati`);
+
+    // ACSAI dall'indirizzo, come da un link condiviso: occupazione su 22
+    // intervistati, quindi segnata; profilo su 52 compilatori, no.
+    await valuta(`(() => { location.hash = '#scheda/70026/0580106203100003'; return true; })()`);
+    await aspettaInPagina(valuta,
+      `document.querySelector('.scheda-titolo')?.textContent.startsWith('applied computer science') &&
+       document.querySelector('.paragone-riga[data-indicatore="occupati"]')`,
+      'scheda di ACSAI');
+    const acsaiScheda = await valuta(`(() => {
+      const corso = (id) => document.querySelector(
+        '.paragone-riga[data-indicatore="' + id + '"] .paragone-valore[data-entita="corso"]');
+      return { occupati: corso('occupati').classList.contains('valore-campione-piccolo'),
+               inCorso: corso('in-corso').classList.contains('valore-campione-piccolo'),
+               segnoIncerto: !!document.querySelector('.paragone-riga[data-indicatore="occupati"] .segno-incerto') };
+    })()`);
+    verifica('scheda ACSAI: l\'occupazione (22 intervistati) e\' segnata come campione piccolo',
+      acsaiScheda.occupati && acsaiScheda.segnoIncerto, JSON.stringify(acsaiScheda));
+    verifica('scheda ACSAI: il profilo (52 compilatori) non e\' segnato', !acsaiScheda.inCorso);
+
+    // Il selettore della scheda comanda quello del confronto: le due viste
+    // non possono mostrare definizioni diverse. Con la restrittiva la
+    // retribuzione di ACSAI e' «-» nella fonte (0 casi).
+    await valuta(`(() => {
+      const s = document.getElementById('sel-definizione-scheda');
+      s.value = 'restrittiva'; s.dispatchEvent(new Event('change')); return true;
+    })()`);
+    await attendi(300);
+    const dopoDefinizione = await valuta(`({
+      principale: document.getElementById('sel-definizione').value,
+      scheda: document.getElementById('sel-definizione-scheda').value,
+      retribuzione: document.querySelector('.paragone-riga[data-indicatore="retribuzione"] .paragone-numero').textContent,
+    })`);
+    verifica('cambiare definizione nella scheda la cambia anche nel confronto',
+      dopoDefinizione.principale === 'restrittiva' && dopoDefinizione.scheda === 'restrittiva',
+      JSON.stringify(dopoDefinizione));
+    verifica('con la restrittiva la retribuzione di ACSAI e\' «0 casi», come nella tabella',
+      dopoDefinizione.retribuzione === '0 casi', dopoDefinizione.retribuzione);
+    await valuta(`(() => {
+      const s = document.getElementById('sel-definizione-scheda');
+      s.value = 'ampia'; s.dispatchEvent(new Event('change')); return true;
+    })()`);
+    await attendi(300);
+
+    // Su un telefono la scheda non allarga la pagina.
+    await invia('Emulation.setDeviceMetricsOverride',
+      { width: 390, height: 900, deviceScaleFactor: 1, mobile: true });
+    await attendi(300);
+    const paginaScheda = await valuta(`[document.documentElement.scrollWidth, innerWidth]`);
+    verifica('su un telefono da 390 px la scheda non allarga la pagina',
+      paginaScheda[0] <= 390, `pagina ${paginaScheda[0]} px, finestra ${paginaScheda[1]}`);
+    await invia('Emulation.clearDeviceMetricsOverride');
+    await attendi(300);
+
+    // «Confronta su tutte le domande»: il confronto diventa corso, ateneo, area.
+    await valuta(`(() => {
+      [...document.querySelectorAll('.scheda-azioni button')]
+        .find(b => b.textContent.includes('tutte le domande')).click();
+      return true;
+    })()`);
+    await aspettaInPagina(valuta,
+      `document.querySelectorAll('#tabella-head th').length === 4 &&
+       !document.getElementById('tabella-head').textContent.includes('caricamento')`,
+      'confronto corso, ateneo e area');
+    const tuttoConfronto = await valuta(`(() => {
+      const th = [...document.querySelectorAll('#tabella-head th')].slice(1).map(t => t.textContent);
+      return { th, vistaConfronto: !document.getElementById('vista-confronto').classList.contains('nascosto'),
+               hash: location.hash,
+               linkScheda: document.querySelector('#tabella-head .link-scheda')?.getAttribute('href'),
+               occupati: [...document.querySelectorAll(
+                 '#griglia-sintesi .kpi[data-indicatore="occupati"] .kpi-valore')].map(v => v.textContent) };
+    })()`);
+    verifica('«Confronta su tutte le domande» porta al confronto con corso, ateneo e area',
+      tuttoConfronto.vistaConfronto && tuttoConfronto.hash === '#confronto' &&
+      tuttoConfronto.th[0].includes('applied computer science') &&
+      tuttoConfronto.th[1].includes('Roma Sapienza') &&
+      tuttoConfronto.th[2].includes('Informatica e Tecnologie ICT'),
+      JSON.stringify(tuttoConfronto.th).slice(0, 200));
+    verifica('la colonna corso rimanda alla sua scheda',
+      tuttoConfronto.linkScheda === '#scheda/70026/0580106203100003', String(tuttoConfronto.linkScheda));
+    verifica('il cruscotto segue le nuove colonne: ACSAI 50,0%, Sapienza 63,9%, area 71,9%',
+      JSON.stringify(tuttoConfronto.occupati) === JSON.stringify(['50,0%', '63,9%', '71,9%']),
+      JSON.stringify(tuttoConfronto.occupati));
+
+    // Un corso che non esiste nell'indirizzo non apre niente e lo dice.
+    await valuta(`(() => { location.hash = '#scheda/70024/__proto__'; return true; })()`);
+    await attendi(300);
+    const corsoFalso = await valuta(`({
+      scheda: !document.getElementById('scheda-corso').classList.contains('nascosto'),
+      messaggio: document.getElementById('cerca-corso-conteggio').textContent,
+    })`);
+    verifica('un corso inesistente nell\'indirizzo non apre una scheda e lo dice',
+      !corsoFalso.scheda && corsoFalso.messaggio.includes('non esiste'), JSON.stringify(corsoFalso));
+    await valuta(`(() => { location.hash = '#confronto'; return true; })()`);
 
     // --- 10. Console pulita ---
     await attendi(300);

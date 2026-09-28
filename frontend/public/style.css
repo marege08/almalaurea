@@ -526,3 +526,532 @@ summary:focus-visible {
   line-height: 1.45;
   color: var(--testo-tenue);
 }
+
+/* --- Views: comparison and course sheet --- */
+
+.schede-vista {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 1.5rem;
+  border-bottom: 1px solid var(--bordo);
+}
+
+.scheda-vista {
+  padding: 0.75rem 1rem;
+  margin-bottom: -1px;
+  border-bottom: 3px solid transparent;
+  color: var(--testo-tenue);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.scheda-vista:hover { color: var(--testo); }
+
+.scheda-vista[aria-current="page"] {
+  color: var(--accento);
+  border-bottom-color: var(--accento);
+}
+
+/* Colour of a comparison column: selector box, table header, summary cards. */
+.pallino-colonna {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: baseline;
+  background: var(--bordo);
+}
+
+.colonna-scheda .pallino-colonna { margin-right: 0; }
+
+/* Link from a course column of the table to its sheet. */
+.link-scheda {
+  display: inline-block;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accento);
+}
+
+/* A button that reads as a link inside a sentence. */
+.link-pulsante {
+  font: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accento);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --- Summary cards ("In sintesi") --- */
+
+.nota-sintesi {
+  margin: -0.4rem 0 1rem;
+  font-size: 0.85rem;
+  color: var(--testo-tenue);
+}
+
+.griglia-sintesi {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(270px, 100%), 1fr));
+  gap: 1rem;
+}
+
+.sintesi-vuota { margin: 0; color: var(--testo-tenue); }
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--bordo);
+  border-radius: 10px;
+  background: var(--bg-pannello);
+  min-width: 0;
+}
+
+.kpi-momento {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accento);
+}
+
+.kpi-titolo {
+  margin: -0.5rem 0 0;
+  font-size: 1.02rem;
+  line-height: 1.3;
+}
+
+.kpi-domanda {
+  margin: -0.5rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--testo-tenue);
+}
+
+.kpi-righe {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.kpi-riga-testa {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.kpi-nome {
+  font-size: 0.85rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kpi-nome small { color: var(--testo-tenue); }
+
+.kpi-valore {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+.kpi-valore.kpi-nota {
+  font-weight: 400;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--testo-tenue);
+}
+
+.kpi-barra {
+  height: 8px;
+  border-radius: 4px;
+  background: #ece8e0;
+  overflow: hidden;
+}
+
+.kpi-barra span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+/* Small sample: same treatment as a table cell below the threshold. */
+.kpi-campione-piccolo .kpi-valore {
+  color: var(--testo-tenue);
+  text-decoration: underline dotted var(--avviso-testo);
+  text-underline-offset: 0.22em;
+}
+
+.kpi-campione-piccolo .kpi-valore::after,
+.valore-campione-piccolo .paragone-numero::after,
+dd.valore-campione-piccolo::after {
+  content: '\2009\2731';
+  color: var(--avviso-testo);
+  font-size: 0.75em;
+  vertical-align: super;
+}
+
+.kpi-campione-piccolo .kpi-barra span { opacity: 0.45; }
+
+.kpi-campione {
+  margin: auto 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid #ece8e0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--testo-tenue);
+}
+
+/* --- Course sheet --- */
+
+.scheda-corso { margin-bottom: 1.5rem; }
+
+.scheda-testa {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.scheda-identita { min-width: 0; }
+
+.scheda-briciole {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  color: var(--testo-tenue);
+}
+
+.scheda-titolo {
+  margin: 0 0 0.6rem;
+  font-family: var(--serif);
+  font-size: 2rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* Course names are lower case in the source; only the display capitalizes. */
+.scheda-titolo::first-letter { text-transform: uppercase; }
+
+.scheda-etichette {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.scheda-etichette li {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--bordo);
+  border-radius: 6px;
+  background: var(--bg-pannello);
+}
+
+.scheda-azioni {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scheda-azioni button { min-height: 44px; }
+
+.scheda-corpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.scheda-paragone { margin-bottom: 0; }
+
+.paragone-testa {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--bordo);
+}
+
+.paragone-testa h3 { margin: 0; font-size: 1.05rem; }
+
+.paragone-legenda {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  font-size: 0.82rem;
+}
+
+.paragone-legenda li { display: flex; align-items: center; gap: 0.4rem; }
+
+.paragone-riga {
+  display: grid;
+  grid-template-columns: minmax(0, 13rem) minmax(7rem, 1fr) 15rem;
+  gap: 1.25rem;
+  align-items: center;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid #ece8e0;
+}
+
+.paragone-intestazione {
+  padding: 0.5rem 0 0.2rem;
+  border-bottom: none;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--testo-tenue);
+}
+
+.paragone-etichetta { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.paragone-titolo { font-weight: 600; font-size: 0.92rem; }
+.paragone-domanda { font-size: 0.75rem; line-height: 1.35; color: var(--testo-tenue); }
+
+.traccia {
+  position: relative;
+  height: 20px;
+  margin: 0 8px;
+}
+
+.traccia::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 9px;
+  height: 2px;
+  background: #e3dfd6;
+}
+
+.traccia-estremi {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  color: var(--testo-tenue);
+}
+
+/* Markers: circle = course, diamond = university, square = group. */
+.segno,
+.segno-legenda {
+  display: inline-block;
+  box-sizing: border-box;
+}
+
+.segno {
+  position: absolute;
+  top: 3px;
+  transform: translateX(-50%);
+  cursor: help;
+}
+
+.segno-cerchio {
+  width: 15px;
+  height: 15px;
+  top: 2.5px;
+  border-radius: 50%;
+  background: var(--accento);
+  border: 2px solid #fff;
+  z-index: 1;
+}
+
+.segno-rombo {
+  width: 11px;
+  height: 11px;
+  top: 4.5px;
+  background: #c47a2c;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.segno-quadrato {
+  width: 12px;
+  height: 12px;
+  top: 4px;
+  background: #fff;
+  border: 2px solid #5b6470;
+}
+
+.segno-legenda.segno-cerchio { position: static; border-color: var(--accento); }
+.segno-legenda.segno-rombo { transform: rotate(45deg); }
+
+/* A course value on a small sample: hollow and dashed, like a guess. */
+.segno-cerchio.segno-incerto {
+  background: #fff;
+  border: 2px dashed var(--accento);
+}
+
+.paragone-valori {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.paragone-valore { font-size: 0.88rem; color: #3a4450; cursor: help; white-space: nowrap; }
+.paragone-valore[data-entita="corso"] { font-size: 0.98rem; font-weight: 700; color: #1d4448; }
+.paragone-valore.paragone-nota { font-style: italic; font-size: 0.8rem; color: var(--testo-tenue); }
+.valore-campione-piccolo .paragone-numero { color: var(--testo-tenue); }
+
+/* Names above the numbers live in the header row; on a phone each number
+   carries its own. */
+.paragone-valore-nome { display: none; }
+
+.scheda-lato { display: flex; flex-direction: column; gap: 1rem; }
+
+.riquadro-campione { margin-bottom: 0; }
+.riquadro-campione h3 { margin: 0 0 0.6rem; font-size: 1rem; }
+.riquadro-campione dl { margin: 0 0 0.6rem; }
+
+.campione-voce {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0;
+  font-size: 0.88rem;
+}
+
+.campione-voce dt { color: var(--testo-tenue); }
+.campione-voce dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.nota-riquadro {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--testo-tenue);
+}
+
+.riga-definizione-scheda {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.riga-definizione-scheda select {
+  font: inherit;
+  font-weight: 400;
+  min-height: 40px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--bordo);
+  border-radius: 6px;
+  background: var(--bg-pannello);
+}
+
+.avviso-prudenza {
+  padding: 1rem 1.1rem;
+  border-radius: 10px;
+  background: #fbf1e4;
+  color: #6b3d0f;
+}
+
+.avviso-prudenza h3 { margin: 0 0 0.35rem; font-size: 0.92rem; }
+.avviso-prudenza p { margin: 0; font-size: 0.84rem; line-height: 1.45; }
+
+.scheda-fonte { margin: 1rem 0 0; color: var(--testo-tenue); }
+
+/* --- Course search --- */
+
+.cerca-corso-campi {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.cerca-corso-campi label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--testo-tenue);
+}
+
+.cerca-corso-campi input,
+.cerca-corso-campi select {
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--testo);
+  min-height: 44px;
+  padding: 0 0.7rem;
+  border: 1px solid var(--bordo);
+  border-radius: 8px;
+  background: var(--bg-pannello);
+  min-width: 0;
+}
+
+.cerca-corso-conteggio {
+  margin: 0.8rem 0 0.4rem;
+  font-size: 0.85rem;
+  color: var(--testo-tenue);
+}
+
+.cerca-corso-risultati {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 26rem;
+  overflow-y: auto;
+  border-top: 1px solid var(--bordo);
+}
+
+.cerca-corso-risultati a {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 0.6rem 0.4rem;
+  border-bottom: 1px solid #ece8e0;
+  color: var(--testo);
+  text-decoration: none;
+}
+
+.cerca-corso-risultati a:hover { background: var(--accento-chiaro); }
+.cerca-corso-risultati a[aria-current="page"] { background: var(--accento-chiaro); font-weight: 600; }
+
+.risultato-nome { min-width: 0; overflow-wrap: anywhere; }
+.risultato-ateneo { flex-shrink: 0; font-size: 0.82rem; color: var(--testo-tenue); }
+
+@media (max-width: 900px) {
+  .scheda-corpo { grid-template-columns: minmax(0, 1fr); }
+  .paragone-riga { grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
+  .paragone-intestazione { display: none; }
+  .paragone-valori { text-align: left; }
+  .paragone-valore-nome {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--testo-tenue);
+  }
+}
+
+@media (max-width: 640px) {
+  .scheda-titolo { font-size: 1.5rem; }
+  .cerca-corso-campi { grid-template-columns: minmax(0, 1fr); }
+  .cerca-corso-risultati a { flex-direction: column; gap: 0.1rem; }
+}

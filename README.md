@@ -9,7 +9,17 @@ indagini *Profilo dei laureati* e *Condizione occupazionale* — fra **atenei** 
 
 ## Cosa fa
 
-- Metti a confronto due o più atenei / gruppi disciplinari, colonna per colonna.
+- Metti a confronto due o più atenei / gruppi disciplinari / corsi, colonna per
+  colonna.
+- **In sintesi**: sopra la tabella, sei schede con le domande che contano di più
+  per scegliere (quanti lavorano, quanto guadagnano, quanto aspettano il primo
+  lavoro, quanto la laurea serve nel lavoro, quanti si laureano in corso, quanti
+  rifarebbero la stessa scelta). Sotto ogni titolo c'è il nome esatto della
+  domanda AlmaLaurea.
+- **Scheda del corso**: cerchi un corso di primo livello e lo vedi accanto al suo
+  ateneo e alla sua area disciplinare, con la numerosità del campione e un
+  avviso quando è troppo piccolo. Ogni scheda ha un indirizzo proprio
+  (`#scheda/<ateneo>/<corso>`) che si può condividere.
 - Scegli quali delle 101 domande vedere (regolarità negli studi, voto di laurea,
   conoscenze linguistiche, profilo dello studente…) più la categoria **Dopo la
   Laurea**, che è l'indagine sull'occupazione a 1/3/5 anni: tasso di
@@ -73,6 +83,7 @@ frontend/public/               TUTTO ciò che viene pubblicato
   js/nomi-ateneo.js            codice -> nome       (GENERATO)
   js/nomi-gruppo.js            codice -> nome       (GENERATO)
   js/processData.js            valore/simbolo -> testo di cella
+  js/indicatori-chiave.js      le domande del cruscotto e della scheda del corso (scritto a mano)
   js/ai/                       strato AI opzionale (vedi sotto)
 tools/
   esegui_harvest.py            scarica le schede e riempie il database

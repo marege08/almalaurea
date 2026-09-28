@@ -178,6 +178,28 @@ export function interrogaCorso(db, corso, definizione) {
   return righe;
 }
 
+/**
+ * Reads where a course belongs: its discipline group and its degree type.
+ *
+ * Every row of a course carries both, so one row is enough. The course sheet
+ * needs the group to find the aggregate it is compared with.
+ *
+ * @param {object} db - Course database of the course's university.
+ * @param {string} corso - Course code.
+ * @returns {{gruppo:string, tipoCorso:string}|null} Null when the database has no row for the course.
+ */
+export function descriviCorso(db, corso) {
+  const stmt = db.prepare('SELECT gruppo, tipo_corso FROM dati WHERE corso = :corso LIMIT 1');
+  try {
+    stmt.bind({ ':corso': corso });
+    if (!stmt.step()) return null;
+    const riga = stmt.getAsObject();
+    return { gruppo: riga.gruppo, tipoCorso: riga.tipo_corso };
+  } finally {
+    stmt.free();
+  }
+}
+
 /** @returns {string[]} Codes of the cached universities, least recently used first. */
 export function ateneiInMemoria() {
   return [...cache.keys()];

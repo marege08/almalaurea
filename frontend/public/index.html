@@ -27,15 +27,37 @@
 
   <section id="area-app" class="nascosto">
 
+    <!-- The two views are plain links to a hash (#confronto, #scheda/...), so
+         a course sheet has an address that can be shared or bookmarked. -->
+    <nav class="schede-vista" aria-label="Viste">
+      <a id="tab-confronto" class="scheda-vista" href="#confronto" aria-current="page">Confronto</a>
+      <a id="tab-scheda" class="scheda-vista" href="#scheda">Scheda del corso</a>
+    </nav>
+
+    <div id="vista-confronto">
+
     <section class="pannello selettore-schede">
       <h2>Cosa vuoi confrontare?</h2>
       <p class="nota-pannello">
-        Aggiungi due o più atenei o gruppi disciplinari da confrontare.
+        Aggiungi due o più atenei, gruppi disciplinari o corsi da confrontare.
       </p>
       <div id="colonne-schede" class="colonne-schede"></div>
       <button id="btn-aggiungi-colonna" type="button" class="pulsante-secondario">
         + Aggiungi colonna
       </button>
+    </section>
+
+    <!-- Summary cards: six key questions for the columns above. app.js fills
+         the grid from js/indicatori-chiave.js on every redraw of the table. -->
+    <section class="pannello sintesi" aria-labelledby="titolo-sintesi">
+      <h2 id="titolo-sintesi">In sintesi</h2>
+      <p class="nota-pannello">
+        Sei domande per farsi un'idea. Sotto ogni titolo c'è il nome esatto
+        della domanda AlmaLaurea; tutte le altre sono nella tabella di confronto
+        più in basso.
+      </p>
+      <p id="nota-sintesi" class="nota-sintesi"></p>
+      <div id="griglia-sintesi" class="griglia-sintesi"></div>
     </section>
 
     <section class="pannello ai-pannello">
@@ -169,6 +191,36 @@ Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code
            text, including the threshold. -->
       <p id="legenda-campione" class="legenda-campione nascosto"></p>
     </section>
+
+    </div>
+
+    <!-- Course sheet: one course next to its university and its discipline
+         group. Hidden until the address asks for it (#scheda...). -->
+    <div id="vista-scheda" class="nascosto">
+      <section id="scheda-corso" class="scheda-corso nascosto"></section>
+
+      <section class="pannello cerca-corso">
+        <h2 id="titolo-cerca-corso">Cerca un corso</h2>
+        <p class="nota-pannello">
+          La scheda mette un corso di laurea di primo livello accanto al suo
+          ateneo e alla sua area disciplinare, sulle domande che contano di più
+          per scegliere.
+        </p>
+        <div class="cerca-corso-campi">
+          <label>Nome del corso
+            <input id="cerca-corso-testo" type="search" autocomplete="off"
+              placeholder="es. informatica, infermieristica, economia pisa" />
+          </label>
+          <label>Ateneo
+            <select id="cerca-corso-ateneo">
+              <option value="">Tutti gli atenei</option>
+            </select>
+          </label>
+        </div>
+        <p id="cerca-corso-conteggio" class="cerca-corso-conteggio" aria-live="polite"></p>
+        <ul id="cerca-corso-risultati" class="cerca-corso-risultati"></ul>
+      </section>
+    </div>
 
   </section>
 
