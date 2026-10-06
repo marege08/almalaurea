@@ -4,6 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Confronta i dati AlmaLaurea</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
 <!-- sql.js is loaded via CDN, so no bundler is required. Version 1.14.0 is
      pinned; the external library is updated manually when needed, not at runtime. -->
@@ -11,175 +14,90 @@
 </head>
 <body>
 
-<header class="intestazione">
-  <h1>Confronta i dati dei laureati</h1>
-  <p class="sottotitolo">
-    Dati ufficiali <strong>AlmaLaurea</strong>, indagine Profilo dei laureati 2025.
-    Nessun numero è ricalcolato: tutto proviene direttamente dalle schede statistiche pubbliche.
-  </p>
+<header class="testata">
+  <div class="contenitore testata-riga">
+    <div class="marchio">
+      <h1>Confronta i dati dei laureati</h1>
+      <p>Dati ufficiali AlmaLaurea 2025, nessun numero ricalcolato</p>
+    </div>
+    <button id="apri-ai" class="btn-ai" type="button" aria-haspopup="dialog">
+      <span aria-hidden="true">✦</span><span class="testo">Chiedi all'AI</span>
+    </button>
+  </div>
+  <!-- The two views are plain links to a hash (#confronto, #scheda/...), so
+       a course sheet has an address that can be shared or bookmarked. -->
+  <nav class="contenitore schede-vista" aria-label="Viste">
+    <a id="tab-confronto" class="scheda-vista" href="#confronto" aria-current="page">Confronto</a>
+    <a id="tab-scheda" class="scheda-vista" href="#scheda">Scheda del corso</a>
+  </nav>
 </header>
 
-<main>
+<main class="contenitore">
 
   <section id="stato-caricamento" class="banda-stato">
     Caricamento dati in corso…
   </section>
 
-  <section id="area-app" class="nascosto">
-
-    <!-- The two views are plain links to a hash (#confronto, #scheda/...), so
-         a course sheet has an address that can be shared or bookmarked. -->
-    <nav class="schede-vista" aria-label="Viste">
-      <a id="tab-confronto" class="scheda-vista" href="#confronto" aria-current="page">Confronto</a>
-      <a id="tab-scheda" class="scheda-vista" href="#scheda">Scheda del corso</a>
-    </nav>
+  <div id="area-app" class="nascosto">
 
     <div id="vista-confronto">
 
-    <section class="pannello selettore-schede">
+    <section class="sezione">
       <h2>Cosa vuoi confrontare?</h2>
-      <p class="nota-pannello">
-        Aggiungi due o più atenei, gruppi disciplinari o corsi da confrontare.
-      </p>
-      <div id="colonne-schede" class="colonne-schede"></div>
-      <button id="btn-aggiungi-colonna" type="button" class="pulsante-secondario">
-        + Aggiungi colonna
-      </button>
-    </section>
-
-    <!-- Summary cards: six key questions for the columns above. app.js fills
-         the grid from js/indicatori-chiave.js on every redraw of the table. -->
-    <section class="pannello sintesi" aria-labelledby="titolo-sintesi">
-      <h2 id="titolo-sintesi">In sintesi</h2>
-      <p class="nota-pannello">
-        Sei domande per farsi un'idea. Sotto ogni titolo c'è il nome esatto
-        della domanda AlmaLaurea; tutte le altre sono nella tabella di confronto
-        più in basso.
-      </p>
-      <p id="nota-sintesi" class="nota-sintesi"></p>
-      <div id="griglia-sintesi" class="griglia-sintesi"></div>
-    </section>
-
-    <section class="pannello ai-pannello">
-      <h2>Chiedi con l'AI <span class="ai-badge">opzionale</span></h2>
-      <p class="nota-pannello">
-        Descrivi a parole cosa vuoi confrontare: un'AI a tua scelta — anche
-        locale sul tuo computer — imposta colonne e domande per te. I numeri
-        restano quelli ufficiali AlmaLaurea: l'AI sceglie solo <em>cosa</em>
-        mostrare, mai <em>quanto</em> vale.
-      </p>
-
-      <details class="ai-connessione">
-        <summary>Collega la tua AI</summary>
-        <div class="ai-config">
-          <label>Preset
-            <select id="ai-preset">
-              <option value="">—</option>
-              <option value="ollama">Ollama (locale)</option>
-              <option value="lmstudio">LM Studio (locale)</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-            </select>
-          </label>
-          <label>Forma API
-            <select id="ai-forma">
-              <option value="openai">OpenAI-compatibile</option>
-              <option value="anthropic">Anthropic</option>
-            </select>
-          </label>
-          <label>URL di base
-            <input id="ai-baseurl" type="text" placeholder="http://localhost:11434/v1" />
-          </label>
-          <label>Modello
-            <input id="ai-model" type="text" placeholder="es. qwen3.6:27b, gpt-4o-mini, claude-haiku-4-5" />
-          </label>
-          <label>Chiave API (se serve)
-            <input id="ai-key" type="password" placeholder="resta solo nel tuo browser" autocomplete="off" />
-          </label>
-          <button id="ai-dimentica" type="button" class="pulsante-secondario">Dimentica</button>
-        </div>
-        <p class="ai-avviso">
-          La configurazione resta nel tuo browser e viene inviata solo all'indirizzo
-          che scegli. Con un modello locale non esce nulla dal tuo computer.
-        </p>
-      </details>
-
-      <details class="ai-aiuto" id="ai-aiuto">
-        <summary>L'AI locale non risponde? Apri qui</summary>
-        <div class="ai-aiuto-corpo">
-          <p>
-            Un modello che gira sul tuo computer (Ollama, LM Studio) accetta di
-            default solo le richieste che partono dal computer stesso, e rifiuta
-            quelle che arrivano da un sito web. È una protezione del programma,
-            non un guasto di questa pagina: devi autorizzare, una volta sola,
-            l'indirizzo di questa pagina, cioè
-          </p>
-          <p class="ai-aiuto-origine"><code class="ai-origine">questa pagina</code></p>
-
-          <p class="ai-aiuto-titolo">Ollama — Linux (servizio systemd)</p>
-          <pre><code>sudo systemctl edit ollama</code></pre>
-          <p>Incolla queste due righe nello spazio modificabile e salva:</p>
-<pre><code>[Service]
-Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code></pre>
-          <p>Poi ricarica il servizio:</p>
-          <pre><code>sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart ollama</code></pre>
-
-          <p class="ai-aiuto-titolo">Ollama — macOS</p>
-          <pre><code>launchctl setenv OLLAMA_ORIGINS "<span class="ai-origine">questa pagina</span>"</code></pre>
-          <p>Poi chiudi e riapri Ollama.</p>
-
-          <p class="ai-aiuto-titolo">Ollama — Windows</p>
-          <p>
-            Crea una variabile d'ambiente utente chiamata
-            <code>OLLAMA_ORIGINS</code> con quel valore, poi chiudi e riapri Ollama.
-          </p>
-
-          <p class="ai-aiuto-titolo">LM Studio</p>
-          <p>
-            Nella scheda del server locale attiva l'opzione CORS, poi riavvia il
-            server.
-          </p>
-
-          <p class="ai-aiuto-nota">
-            Che questa pagina sia su <code>https</code> e il tuo modello su
-            <code>http://localhost</code> non è un problema: i browser trattano
-            localhost come indirizzo sicuro. L'unico ostacolo è l'autorizzazione
-            qui sopra. Anche dopo averla data, la richiesta non lascia il tuo
-            computer: va dal tuo browser al tuo modello, e basta.
-          </p>
-        </div>
-      </details>
-
-      <div class="ai-richiesta">
-        <textarea id="ai-frase" rows="2"
-          placeholder="Es. Confronta le prospettive di lavoro tra ingegneria informatica ed economia"></textarea>
-        <button id="ai-invia" type="button" class="pulsante-primario">Chiedi</button>
+      <p class="sotto">Atenei, gruppi disciplinari o singoli corsi.</p>
+      <div class="colonne-riga">
+        <div id="colonne-schede" class="colonne-schede"></div>
+        <button id="btn-aggiungi-colonna" type="button" class="aggiungi">+ Aggiungi colonna</button>
       </div>
-      <p id="ai-stato" class="ai-stato"></p>
+      <p id="ai-esito" class="ai-esito nascosto" aria-live="polite"></p>
+      <!-- Warnings about the comparison as a whole (mixed degree types, small
+           samples). Hidden when there is nothing to say; app.js fills it. -->
+      <details id="avvisi" class="avvisi nascosto">
+        <summary id="avvisi-titolo"></summary>
+        <ul id="avvisi-lista"></ul>
+      </details>
     </section>
 
-    <section class="pannello filtri">
-      <h2>Quali domande vuoi vedere?</h2>
-      <p class="nota-pannello">
-        Tutte sono selezionate di default. Deseleziona quelle che non ti interessano
-        per concentrarti su un confronto specifico.
+    <!-- Key questions for the columns above, on fixed scales. app.js fills
+         the rows from js/indicatori-chiave.js on every redraw of the table. -->
+    <section class="sezione" aria-labelledby="titolo-sintesi">
+      <h2 id="titolo-sintesi">In sintesi</h2>
+      <p class="sotto">
+        Sei domande per farsi un'idea, ognuna sulla sua scala fissa: le
+        percentuali vanno sempre da 0 a 100, così una differenza di un punto
+        resta piccola anche a occhio. Sotto ogni titolo c'è la domanda
+        AlmaLaurea esatta.
       </p>
-      <!-- Selector for the definition of "occupato". It remains hidden until
-           the application finds at least two definitions in the database; the
-           options are read from the data and generated dynamically, not listed here. -->
-      <div id="riquadro-definizione" class="riquadro-definizione nascosto">
-        <div class="riga-definizione">
+      <div id="griglia-sintesi" class="righe"></div>
+      <p id="nota-sintesi" class="nota"></p>
+    </section>
+
+    <section class="sezione filtri">
+      <h2>Quali domande vuoi nella tabella?</h2>
+      <p class="sotto">Le principali sono già scelte. Apri un gruppo per aggiungerne altre.</p>
+      <div class="opzioni">
+        <!-- Selector for the definition of "occupato". It remains hidden until
+             the application finds at least two definitions in the database; the
+             options are read from the data and generated dynamically. -->
+        <div id="riquadro-definizione" class="riquadro-definizione nascosto">
           <label for="sel-definizione">Definizione di &laquo;occupato&raquo;</label>
           <select id="sel-definizione"></select>
         </div>
-        <p id="nota-definizione" class="nota-definizione"></p>
+        <button id="btn-principali" class="link" type="button">Solo le principali</button>
+        <button id="btn-tutte" class="link" type="button">Tutte</button>
+        <span id="conta-domande" class="conta"></span>
       </div>
-
+      <p id="nota-definizione" class="nota-definizione"></p>
       <div id="accordion-filtri" class="accordion"></div>
     </section>
 
-    <section class="pannello tabella-confronto">
-      <h2>Confronto</h2>
+    <div id="azione-confronta" class="azione">
+      <button id="btn-confronta" class="btn-pri btn-grande" type="button">Confronta</button>
+    </div>
+
+    <section id="risultato" class="sezione nascosto" aria-labelledby="titolo-tabella">
+      <h2 id="titolo-tabella">Tabella completa</h2>
+      <p class="sotto">Ogni domanda scelta sopra, colonna per colonna.</p>
       <div class="scroll-tabella">
         <table id="tabella-dati">
           <thead id="tabella-head"></thead>
@@ -189,7 +107,11 @@ Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code
       <!-- Legend for the small-sample marker. It remains hidden until at least
            one cell below the threshold appears in the table; app.js writes the
            text, including the threshold. -->
-      <p id="legenda-campione" class="legenda-campione nascosto"></p>
+      <p id="legenda-campione" class="nota nascosto"></p>
+      <p class="nota">
+        In grassetto il valore più alto di ogni riga, che non vuol dire
+        «migliore»: sui tempi per il primo lavoro, per esempio, conta il più basso.
+      </p>
     </section>
 
     </div>
@@ -197,11 +119,11 @@ Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code
     <!-- Course sheet: one course next to its university and its discipline
          group. Hidden until the address asks for it (#scheda...). -->
     <div id="vista-scheda" class="nascosto">
-      <section id="scheda-corso" class="scheda-corso nascosto"></section>
+      <div id="scheda-corso" class="scheda-corso nascosto"></div>
 
-      <section class="pannello cerca-corso">
+      <section class="sezione cerca-corso">
         <h2 id="titolo-cerca-corso">Cerca un corso</h2>
-        <p class="nota-pannello">
+        <p class="sotto">
           La scheda mette un corso di laurea di primo livello accanto al suo
           ateneo e alla sua area disciplinare, sulle domande che contano di più
           per scegliere.
@@ -222,23 +144,133 @@ Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code
       </section>
     </div>
 
-  </section>
+  </div>
 
   <section id="area-errore" class="banda-errore nascosto"></section>
 
 </main>
 
-<footer class="piede">
+<footer class="contenitore piede">
   <p>
-    Fonte dei dati: <a href="https://www2.almalaurea.it/" target="_blank" rel="noopener">AlmaLaurea</a>
-    — riproduzione a fini non commerciali con citazione della fonte.
-    Nessun dato è generato o stimato: ogni valore proviene dalle schede statistiche ufficiali.
+    Fonte dei dati: <a href="https://www2.almalaurea.it/" target="_blank" rel="noopener">AlmaLaurea</a>,
+    Profilo dei laureati e Condizione occupazionale 2025. Riproduzione a fini
+    non commerciali con citazione della fonte. Nessun dato è generato o
+    stimato: ogni valore proviene dalle schede statistiche ufficiali.
   </p>
   <p class="nota-piccola">
     Corrispondenza codice→nome di atenei e gruppi disciplinari presa dai menu
-    a tendina ufficiali del sito AlmaLaurea, non da memoria (vedi <code>fase1-resoconto.md</code>).
+    a tendina ufficiali del sito AlmaLaurea, non da memoria.
   </p>
 </footer>
+
+<!-- AI layer, in a dialog opened from the header. Every control keeps the id
+     app.js reads; the dialog only changes where they live. -->
+<dialog id="dlg-ai" class="dlg-ai" aria-labelledby="ai-titolo">
+  <div class="dlg-testa">
+    <h3 id="ai-titolo">Chiedi all'AI</h3>
+    <button id="chiudi-ai" class="togli" type="button" aria-label="Chiudi">×</button>
+  </div>
+  <div class="dlg-corpo">
+    <p>
+      Scrivi cosa vuoi confrontare: un'AI a tua scelta, anche locale sul tuo
+      computer, imposta colonne e domande per te. I numeri restano quelli
+      ufficiali AlmaLaurea: l'AI sceglie <em>cosa</em> mostrare, mai
+      <em>quanto</em> vale.
+    </p>
+
+    <div class="ai-richiesta">
+      <textarea id="ai-frase" rows="3"
+        placeholder="Es. Confronta le prospettive di lavoro tra ingegneria informatica ed economia"></textarea>
+    </div>
+    <p id="ai-stato" class="ai-stato" aria-live="polite"></p>
+
+    <details class="ai-connessione">
+      <summary>Collega la tua AI, anche locale</summary>
+      <div class="ai-config">
+        <label>Preset
+          <select id="ai-preset">
+            <option value="">—</option>
+            <option value="ollama">Ollama (locale)</option>
+            <option value="lmstudio">LM Studio (locale)</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </label>
+        <label>Forma API
+          <select id="ai-forma">
+            <option value="openai">OpenAI-compatibile</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </label>
+        <label>URL di base
+          <input id="ai-baseurl" type="text" placeholder="http://localhost:11434/v1" />
+        </label>
+        <label>Modello
+          <input id="ai-model" type="text" placeholder="es. qwen3.6:27b, gpt-4o-mini, claude-haiku-4-5" />
+        </label>
+        <label>Chiave API (se serve)
+          <input id="ai-key" type="password" placeholder="resta solo nel tuo browser" autocomplete="off" />
+        </label>
+        <button id="ai-dimentica" type="button" class="btn-sec">Dimentica</button>
+      </div>
+      <p class="ai-avviso">
+        La configurazione resta nel tuo browser e viene inviata solo all'indirizzo
+        che scegli. Con un modello locale non esce nulla dal tuo computer.
+      </p>
+    </details>
+
+    <details class="ai-aiuto" id="ai-aiuto">
+      <summary>L'AI locale non risponde? Apri qui</summary>
+      <div class="ai-aiuto-corpo">
+        <p>
+          Un modello che gira sul tuo computer (Ollama, LM Studio) accetta di
+          default solo le richieste che partono dal computer stesso, e rifiuta
+          quelle che arrivano da un sito web. È una protezione del programma,
+          non un guasto di questa pagina: devi autorizzare, una volta sola,
+          l'indirizzo di questa pagina, cioè
+        </p>
+        <p class="ai-aiuto-origine"><code class="ai-origine">questa pagina</code></p>
+
+        <p class="ai-aiuto-titolo">Ollama — Linux (servizio systemd)</p>
+        <pre><code>sudo systemctl edit ollama</code></pre>
+        <p>Incolla queste due righe nello spazio modificabile e salva:</p>
+<pre><code>[Service]
+Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code></pre>
+        <p>Poi ricarica il servizio:</p>
+        <pre><code>sudo systemctl daemon-reload &amp;&amp; sudo systemctl restart ollama</code></pre>
+
+        <p class="ai-aiuto-titolo">Ollama — macOS</p>
+        <pre><code>launchctl setenv OLLAMA_ORIGINS "<span class="ai-origine">questa pagina</span>"</code></pre>
+        <p>Poi chiudi e riapri Ollama.</p>
+
+        <p class="ai-aiuto-titolo">Ollama — Windows</p>
+        <p>
+          Crea una variabile d'ambiente utente chiamata
+          <code>OLLAMA_ORIGINS</code> con quel valore, poi chiudi e riapri Ollama.
+        </p>
+
+        <p class="ai-aiuto-titolo">LM Studio</p>
+        <p>
+          Nella scheda del server locale attiva l'opzione CORS, poi riavvia il
+          server.
+        </p>
+
+        <p class="ai-aiuto-nota">
+          Che questa pagina sia su <code>https</code> e il tuo modello su
+          <code>http://localhost</code> non è un problema: i browser trattano
+          localhost come indirizzo sicuro. L'unico ostacolo è l'autorizzazione
+          qui sopra. Anche dopo averla data, la richiesta non lascia il tuo
+          computer: va dal tuo browser al tuo modello, e basta.
+        </p>
+      </div>
+    </details>
+
+    <div class="dlg-piede">
+      <button id="annulla-ai" class="btn-sec" type="button">Chiudi</button>
+      <button id="ai-invia" class="btn-pri" type="button">Chiedi</button>
+    </div>
+  </div>
+</dialog>
 
 <script type="module" src="js/app.js"></script>
 </body>

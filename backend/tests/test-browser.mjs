@@ -188,23 +188,50 @@ async function main() {
        !document.getElementById('area-app').classList.contains('nascosto')`,
       'app visibile (database caricato)');
 
-    // --- 1. La tabella si popola ---
+    // --- 0. All'apertura: le principali scelte, la tabella chiusa ---
+    // Le domande principali sono quelle degli indicatori chiave (8, da
+    // indicatori-chiave.js); la tabella completa compare solo dopo il primo
+    // «Confronta», poi segue da sola ogni modifica.
+    const apertura = await valuta(`(() => ({
+      scelte: [...document.querySelectorAll('#accordion-filtri input[type=checkbox]')]
+        .filter(c => c.checked && !c.closest('label').hidden).map(c => c.id),
+      conta: document.getElementById('conta-domande').textContent,
+      tabellaNascosta: document.getElementById('risultato').classList.contains('nascosto'),
+    }))()`);
+    verifica('all\'apertura sono scelte le 8 domande principali',
+      apertura.scelte.length === 8 && apertura.scelte.includes('chk-tasso_di_occupazione') &&
+      apertura.conta === '8 domande scelte', `${apertura.scelte.length}: ${apertura.conta}`);
+    verifica('all\'apertura la tabella completa e\' nascosta', apertura.tabellaNascosta);
+    await valuta(`(() => { document.getElementById('btn-confronta').click(); return true; })()`);
+    const dopoConfronta = await valuta(`({
+      visibile: !document.getElementById('risultato').classList.contains('nascosto'),
+      pulsante: !!document.getElementById('btn-confronta'),
+      righe: document.querySelectorAll('#tabella-body tr').length,
+    })`);
+    verifica('«Confronta» apre la tabella e lascia il posto all\'aggiornamento dal vivo',
+      dopoConfronta.visibile && !dopoConfronta.pulsante && dopoConfronta.righe > 8,
+      JSON.stringify(dopoConfronta));
+
+    // --- 1. La tabella si popola (con tutte le domande) ---
+    await valuta(`(() => { document.getElementById('btn-tutte').click(); return true; })()`);
     const celle = await valuta(`document.querySelectorAll('#tabella-body td').length`);
     verifica('la tabella di confronto si popola', celle > 500, `${celle} celle`);
+    const alti = await valuta(`document.querySelectorAll('#tabella-body td.alto').length`);
+    verifica('il valore piu\' alto di ogni riga e\' segnato', alti > 50, `${alti} celle in grassetto`);
 
-    // --- 1b. Il cruscotto «In sintesi» legge gli stessi dati della tabella ---
+    // --- 1b. La sintesi «In sintesi» legge gli stessi dati della tabella ---
     // All'avvio le colonne sono Marche Politecnica (70001) e Bari (70002).
     // «Tasso di occupazione › Totale» vale 64,6 e 59,7; la retribuzione di
     // Bari 1.304 euro (definizione ampia).
     const sintesi = await valuta(`(() => {
-      const carte = [...document.querySelectorAll('#griglia-sintesi .kpi')];
+      const righe = [...document.querySelectorAll('#griglia-sintesi .paragone-riga[data-indicatore]')];
       const valori = (id) => [...document.querySelectorAll(
-        '#griglia-sintesi .kpi[data-indicatore="' + id + '"] .kpi-valore')].map(v => v.textContent);
-      return { carte: carte.length,
+        '#griglia-sintesi .paragone-riga[data-indicatore="' + id + '"] .paragone-numero')].map(v => v.textContent);
+      return { righe: righe.length,
                occupati: valori('occupati'), retribuzione: valori('retribuzione'),
-               domanda: document.querySelector('#griglia-sintesi .kpi[data-indicatore="occupati"] .kpi-domanda')?.textContent };
+               domanda: document.querySelector('#griglia-sintesi .paragone-riga[data-indicatore="occupati"] .paragone-domanda')?.textContent };
     })()`);
-    verifica('il cruscotto mostra 6 schede', sintesi.carte === 6, `${sintesi.carte} schede`);
+    verifica('la sintesi mostra 6 righe', sintesi.righe === 6, `${sintesi.righe} righe`);
     verifica('«Quanti lavorano»: 64,6% Marche Politecnica, 59,7% Bari',
       sintesi.occupati[0] === '64,6%' && sintesi.occupati[1] === '59,7%', sintesi.occupati.join(' | '));
     verifica('«Quanto si guadagna»: Bari 1.304 €',
@@ -661,12 +688,12 @@ async function main() {
     verifica('il link della vista porta alla scheda', risultato.vistaScheda);
 
     const valoriScheda = async (indicatore) => valuta(`(() => {
-      const riga = document.querySelector('.paragone-riga[data-indicatore="${indicatore}"]');
+      const riga = document.querySelector('#scheda-corso .paragone-riga[data-indicatore="${indicatore}"]');
       return riga ? [...riga.querySelectorAll('.paragone-numero')].map(v => v.textContent) : null;
     })()`);
     await aspettaInPagina(valuta,
-      `document.querySelector('.scheda-titolo')?.textContent === 'informatica (L-31)' &&
-       document.querySelector('.paragone-riga[data-indicatore="occupati"]')`,
+      `document.querySelector('#scheda-corso .scheda-titolo')?.textContent === 'informatica (L-31)' &&
+       document.querySelector('#scheda-corso .paragone-riga[data-indicatore="occupati"]')`,
       'scheda di informatica (L-31) di Pisa');
     const occupatiPisa = await valoriScheda('occupati');
     verifica('scheda Pisa: occupati 62,0% corso, 62,7% ateneo, 71,9% area',
@@ -678,7 +705,7 @@ async function main() {
       JSON.stringify(retribuzionePisa));
     const testaPisa = await valuta(`(() => ({
       etichette: document.querySelector('.scheda-etichette').textContent,
-      righe: document.querySelectorAll('.paragone-riga[data-indicatore]').length,
+      righe: document.querySelectorAll('#scheda-corso .paragone-riga[data-indicatore]').length,
       stella: document.querySelectorAll('#scheda-corso .valore-campione-piccolo').length,
     }))()`);
     verifica('la scheda dice ateneo, tipo di laurea e area',
@@ -692,15 +719,15 @@ async function main() {
     // intervistati, quindi segnata; profilo su 52 compilatori, no.
     await valuta(`(() => { location.hash = '#scheda/70026/0580106203100003'; return true; })()`);
     await aspettaInPagina(valuta,
-      `document.querySelector('.scheda-titolo')?.textContent.startsWith('applied computer science') &&
-       document.querySelector('.paragone-riga[data-indicatore="occupati"]')`,
+      `document.querySelector('#scheda-corso .scheda-titolo')?.textContent.startsWith('applied computer science') &&
+       document.querySelector('#scheda-corso .paragone-riga[data-indicatore="occupati"]')`,
       'scheda di ACSAI');
     const acsaiScheda = await valuta(`(() => {
       const corso = (id) => document.querySelector(
-        '.paragone-riga[data-indicatore="' + id + '"] .paragone-valore[data-entita="corso"]');
+        '#scheda-corso .paragone-riga[data-indicatore="' + id + '"] .paragone-valore[data-entita="corso"]');
       return { occupati: corso('occupati').classList.contains('valore-campione-piccolo'),
                inCorso: corso('in-corso').classList.contains('valore-campione-piccolo'),
-               segnoIncerto: !!document.querySelector('.paragone-riga[data-indicatore="occupati"] .segno-incerto') };
+               segnoIncerto: !!document.querySelector('#scheda-corso .paragone-riga[data-indicatore="occupati"] .segno-incerto') };
     })()`);
     verifica('scheda ACSAI: l\'occupazione (22 intervistati) e\' segnata come campione piccolo',
       acsaiScheda.occupati && acsaiScheda.segnoIncerto, JSON.stringify(acsaiScheda));
@@ -717,7 +744,7 @@ async function main() {
     const dopoDefinizione = await valuta(`({
       principale: document.getElementById('sel-definizione').value,
       scheda: document.getElementById('sel-definizione-scheda').value,
-      retribuzione: document.querySelector('.paragone-riga[data-indicatore="retribuzione"] .paragone-numero').textContent,
+      retribuzione: document.querySelector('#scheda-corso .paragone-riga[data-indicatore="retribuzione"] .paragone-numero').textContent,
     })`);
     verifica('cambiare definizione nella scheda la cambia anche nel confronto',
       dopoDefinizione.principale === 'restrittiva' && dopoDefinizione.scheda === 'restrittiva',
@@ -756,7 +783,9 @@ async function main() {
                hash: location.hash,
                linkScheda: document.querySelector('#tabella-head .link-scheda')?.getAttribute('href'),
                occupati: [...document.querySelectorAll(
-                 '#griglia-sintesi .kpi[data-indicatore="occupati"] .kpi-valore')].map(v => v.textContent) };
+                 '#griglia-sintesi .paragone-riga[data-indicatore="occupati"] .paragone-numero')].map(v => v.textContent),
+               avvisi: [...document.querySelectorAll('#avvisi-lista li')].map(li => li.textContent),
+               avvisiVisibili: !document.getElementById('avvisi').classList.contains('nascosto') };
     })()`);
     verifica('«Confronta su tutte le domande» porta al confronto con corso, ateneo e area',
       tuttoConfronto.vistaConfronto && tuttoConfronto.hash === '#confronto' &&
@@ -766,9 +795,34 @@ async function main() {
       JSON.stringify(tuttoConfronto.th).slice(0, 200));
     verifica('la colonna corso rimanda alla sua scheda',
       tuttoConfronto.linkScheda === '#scheda/70026/0580106203100003', String(tuttoConfronto.linkScheda));
-    verifica('il cruscotto segue le nuove colonne: ACSAI 50,0%, Sapienza 63,9%, area 71,9%',
+    verifica('la sintesi segue le nuove colonne: ACSAI 50,0%, Sapienza 63,9%, area 71,9%',
       JSON.stringify(tuttoConfronto.occupati) === JSON.stringify(['50,0%', '63,9%', '71,9%']),
       JSON.stringify(tuttoConfronto.occupati));
+    // Corso accanto ad ateneo e area: due avvisi, i tipi di laurea mescolati
+    // e il campione piccolo di ACSAI sul lavoro (22 intervistati).
+    verifica('gli avvisi dicono colonne di tipo diverso e campione piccolo di ACSAI sul lavoro',
+      tuttoConfronto.avvisiVisibili && tuttoConfronto.avvisi.length === 2 &&
+      tuttoConfronto.avvisi[0].startsWith('Colonne di tipo diverso') &&
+      tuttoConfronto.avvisi[1].includes('sul lavoro') && tuttoConfronto.avvisi[1].includes('22 intervistati'),
+      JSON.stringify(tuttoConfronto.avvisi).slice(0, 200));
+
+    // Il pop-up dell'AI si apre dal pulsante in testata e si chiude.
+    const dialogo = await valuta(`(() => {
+      const d = document.getElementById('dlg-ai');
+      document.getElementById('apri-ai').click();
+      const aperto = d.open && !!d.querySelector('#ai-frase') && !!d.querySelector('#ai-invia');
+      document.getElementById('chiudi-ai').click();
+      return { aperto, chiuso: !d.open };
+    })()`);
+    verifica('il pop-up dell\'AI si apre e si chiude con tutti i suoi comandi',
+      dialogo.aperto && dialogo.chiuso, JSON.stringify(dialogo));
+
+    // «Solo le principali» torna alle 8 domande.
+    const principali = await valuta(`(() => {
+      document.getElementById('btn-principali').click();
+      return document.getElementById('conta-domande').textContent;
+    })()`);
+    verifica('«Solo le principali» torna alle 8 domande', principali === '8 domande scelte', principali);
 
     // Un corso che non esiste nell'indirizzo non apre niente e lo dice.
     await valuta(`(() => { location.hash = '#scheda/70024/__proto__'; return true; })()`);

@@ -122,20 +122,61 @@ const elLegendaCampione = document.getElementById('legenda-campione');
 const elNotaSintesi = document.getElementById('nota-sintesi');
 const elGrigliaSintesi = document.getElementById('griglia-sintesi');
 
-// One colour per comparison column, shared by the column selector, the table
-// header and the summary cards, so a bar can be matched to its column at a
-// glance. Neighbouring colours also differ in lightness, not only in hue, and
-// every bar sits next to the column's name: colour is never the only cue.
-const COLORI_COLONNA = ['#2a5d63', '#c47a2c', '#6f7f96', '#8a5a83', '#7d8a3a', '#a8483a'];
+const elAvvisi = document.getElementById('avvisi');
+const elAvvisiTitolo = document.getElementById('avvisi-titolo');
+const elAvvisiLista = document.getElementById('avvisi-lista');
+const elContaDomande = document.getElementById('conta-domande');
+const elRisultato = document.getElementById('risultato');
+const elAzioneConfronta = document.getElementById('azione-confronta');
+
+// One marker per comparison column, shared by the column selector, the table
+// header, the summary and the course sheet, so a value can be matched to its
+// column at a glance. Columns differ by SHAPE first and by tone second (the
+// tones are CSS classes f0..f5 in style.css): several greens alone would not
+// be enough. Shapes are drawn on a 12x12 box.
+const SVG = 'http://www.w3.org/2000/svg';
+const FORME_SEGNO = [
+  ['circle', { cx: 6, cy: 6, r: 5 }],
+  ['polygon', { points: '6,0.5 11.5,6 6,11.5 0.5,6' }],
+  ['rect', { x: 1.5, y: 1.5, width: 9, height: 9 }],
+  ['polygon', { points: '6,1 11.5,11 0.5,11' }],
+  ['polygon', { points: '0.5,1 11.5,1 6,11' }],
+  ['polygon', { points: '3,1 9,1 11.5,6 9,11 3,11 0.5,6' }],
+];
 
 /**
- * Returns the colour of a comparison column.
+ * Creates the marker of a comparison column.
+ *
+ * A hollow marker means a value based on fewer respondents than
+ * SOGLIA_CAMPIONE_PICCOLO, the same meaning everywhere on the page.
  *
  * @param {number} indice - Position of the column, from 0.
- * @returns {string} CSS colour.
+ * @param {boolean} [vuoto] - Draw the outline only (small sample).
+ * @param {string} [testo] - Tooltip, for a marker that stands for a value.
+ * @returns {SVGSVGElement} Marker.
  */
-function coloreColonna(indice) {
-  return COLORI_COLONNA[indice % COLORI_COLONNA.length];
+function creaSegno(indice, vuoto = false, testo = '') {
+  const posizione = indice % FORME_SEGNO.length;
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('class', `segno f${posizione}${vuoto ? ' segno-incerto' : ''}`);
+  const [tag, attributi] = FORME_SEGNO[posizione];
+  const forma = document.createElementNS(SVG, tag);
+  for (const [nome, valore] of Object.entries(attributi)) forma.setAttribute(nome, valore);
+  forma.setAttribute('fill', vuoto ? 'none' : 'currentColor');
+  if (vuoto) {
+    forma.setAttribute('stroke', 'currentColor');
+    forma.setAttribute('stroke-width', '2');
+  }
+  svg.append(forma);
+  if (testo) {
+    const titolo = document.createElementNS(SVG, 'title');
+    titolo.textContent = testo;
+    svg.prepend(titolo);
+  } else {
+    svg.setAttribute('aria-hidden', 'true');
+  }
+  return svg;
 }
 
 /**
@@ -321,10 +362,9 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
   contenitore.className = 'colonna-scheda';
   contenitore.dataset.id = id;
 
-  // Coloured by renderTabella(), which knows the column's current position.
-  const pallino = document.createElement('span');
-  pallino.className = 'pallino-colonna';
-  pallino.setAttribute('aria-hidden', 'true');
+  // Filled by renderTabella(), which knows the column's current position.
+  const postoSegno = document.createElement('span');
+  postoSegno.className = 'posto-segno';
 
   const selectTipo = document.createElement('select');
   selectTipo.className = 'sel-tipo';
@@ -405,7 +445,7 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
 
   const btnRimuovi = document.createElement('button');
   btnRimuovi.type = 'button';
-  btnRimuovi.className = 'rimuovi-colonna';
+  btnRimuovi.className = 'rimuovi-colonna togli';
   btnRimuovi.title = 'Rimuovi questa colonna';
   btnRimuovi.textContent = '×';
   btnRimuovi.addEventListener('click', () => {
@@ -414,7 +454,12 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
     renderTabella();
   });
 
-  contenitore.append(pallino, selectTipo, selectCodice, selectCorso, btnRimuovi);
+  btnRimuovi.setAttribute('aria-label', 'Rimuovi questa colonna');
+  selectTipo.setAttribute('aria-label', 'Tipo di colonna');
+  selectCodice.setAttribute('aria-label', 'Ateneo o gruppo');
+  selectCorso.setAttribute('aria-label', 'Corso');
+
+  contenitore.append(postoSegno, selectTipo, selectCodice, selectCorso, btnRimuovi);
   elColonneSchede.appendChild(contenitore);
   if (stato.tipo === 'corso') preparaColonnaCorso(stato);
 }
@@ -435,6 +480,19 @@ const conteggiPerMacro = new Map();
 // definition can be hidden.
 const ELEMENTO_VOCE = new Map();
 
+// The main questions, selected when the page opens: the ones behind the key
+// indicators of the summary and of the course sheet (indicatori-chiave.js),
+// matched on survey and category, so the editorial choice lives in one file.
+const ID_PRINCIPALI = new Set();
+for (const ind of [...INDICATORI_CRUSCOTTO, ...INDICATORI_SOLO_SCHEDA]) {
+  for (const { voce } of VOCE_PER_ID.values()) {
+    if (voce.indagine === ind.indagine && voce.categoria === ind.categoria &&
+        voce.indicatori.includes(ind.indicatore)) {
+      ID_PRINCIPALI.add(voce.id);
+    }
+  }
+}
+
 /** @param {string} macro */
 function aggiornaConteggio(macro) {
   const dati = conteggiPerMacro.get(macro);
@@ -444,7 +502,33 @@ function aggiornaConteggio(macro) {
   const disponibili = dati.voci.filter(voceDisponibile);
   const tot = disponibili.filter((v) => document.getElementById(`chk-${v.id}`)?.checked).length;
   dati.spanConteggio.textContent = `${tot} di ${disponibili.length} selezionate`;
+  aggiornaContaDomande();
 }
+
+/** Writes how many questions the table will show, across all groups. */
+function aggiornaContaDomande() {
+  const n = vociSelezionate().reduce((somma, { voci }) => somma + voci.length, 0);
+  elContaDomande.textContent = n === 1 ? '1 domanda scelta' : `${n} domande scelte`;
+}
+
+/**
+ * Selects the questions that satisfy a rule and deselects the others.
+ *
+ * @param {(voce: object) => boolean} regola - Whether a question is selected.
+ */
+function impostaSelezione(regola) {
+  for (const { voce } of VOCE_PER_ID.values()) {
+    const chk = document.getElementById(`chk-${voce.id}`);
+    if (chk) chk.checked = regola(voce);
+  }
+  aggiornaTuttiIConteggi();
+  renderTabella();
+}
+
+document.getElementById('btn-principali')
+  .addEventListener('click', () => impostaSelezione((v) => ID_PRINCIPALI.has(v.id)));
+document.getElementById('btn-tutte')
+  .addEventListener('click', () => impostaSelezione(() => true));
 
 // Build each checkbox once and toggle visibility so changing the definition
 // does not clear the user's selections elsewhere on the page.
@@ -466,7 +550,14 @@ function aggiornaTuttiIConteggi() {
   for (const macro of conteggiPerMacro.keys()) aggiornaConteggio(macro);
 }
 
-/** Renders the question-filter accordion. */
+/**
+ * Renders the question-filter accordion.
+ *
+ * Every question is a checkbox drawn as a pill. Only the main questions
+ * (ID_PRINCIPALI) start selected; a group that holds some opens with them in
+ * view and the others one click away, a group that holds none starts closed
+ * and shows all of its questions when opened.
+ */
 function renderFiltri() {
   elAccordionFiltri.innerHTML = '';
   conteggiPerMacro.clear();
@@ -474,9 +565,11 @@ function renderFiltri() {
 
   for (const macro of ORDINE_MACRO) {
     const voci = CONFIG_FILTRI[macro];
+    const principali = voci.filter((v) => ID_PRINCIPALI.has(v.id)).length;
 
     const details = document.createElement('details');
-    details.open = true;
+    details.open = principali > 0;
+    if (principali === 0) details.classList.add('tutte');
 
     const summary = document.createElement('summary');
     const spanTitolo = document.createElement('span');
@@ -492,13 +585,14 @@ function renderFiltri() {
     conteggiPerMacro.set(macro, { spanConteggio, voci, details });
 
     for (const voce of voci) {
+      const principale = ID_PRINCIPALI.has(voce.id);
       const label = document.createElement('label');
-      label.className = 'voce-checkbox';
+      label.className = principale ? 'voce-checkbox' : 'voce-checkbox secondaria';
 
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.id = `chk-${voce.id}`;
-      input.checked = true;
+      input.checked = principale;
       input.addEventListener('change', () => {
         aggiornaConteggio(macro);
         renderTabella();
@@ -510,6 +604,17 @@ function renderFiltri() {
       label.append(input, testo);
       lista.appendChild(label);
       ELEMENTO_VOCE.set(voce.id, label);
+    }
+
+    if (principali > 0 && principali < voci.length) {
+      const mostra = el('button', { type: 'button', class: 'mostra-tutte', 'aria-expanded': 'false' },
+        'Mostra tutte');
+      mostra.addEventListener('click', () => {
+        const aperto = details.classList.toggle('tutte');
+        mostra.textContent = aperto ? 'Mostra solo le scelte' : 'Mostra tutte';
+        mostra.setAttribute('aria-expanded', String(aperto));
+      });
+      lista.appendChild(mostra);
     }
 
     details.appendChild(lista);
@@ -676,7 +781,9 @@ function interrogaScheda(colonna) {
  * @param {number|null|undefined} n - Count to format.
  * @returns {string} Formatted count, or an em dash when the count is missing.
  */
-const formattaNumero = (n) => (n != null ? n.toLocaleString('it-IT') : '—');
+// Grouping is forced: Italian locale data leaves four-digit numbers ungrouped
+// by default, which would print 6086 next to 21.984.
+const formattaNumero = (n) => (n != null ? n.toLocaleString('it-IT', { useGrouping: 'always' }) : '—');
 
 // AlmaLaurea's own terms for respondents in each survey: graduate profile
 // survey respondents complete a questionnaire, while employment outcomes
@@ -761,16 +868,13 @@ function testoCampione(campione) {
  * @param {Map} numerosita - Sample sizes by survey.
  * @param {string[]} indaginiMostrate - Surveys displayed in the table.
  * @param {boolean} inCaricamento - Whether a course column is still downloading.
- * @param {string} colore - Colour of the column.
+ * @param {number} indice - Position of the column, from 0.
  * @returns {HTMLElement} Column header.
  */
-function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate, inCaricamento, colore) {
+function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate, inCaricamento, indice) {
   const contenitore = document.createElement('div');
   const riga1 = document.createElement('div');
-  riga1.append(
-    el('span', { class: 'pallino-colonna', style: { background: colore }, 'aria-hidden': 'true' }),
-    etichettaColonna(colonna)
-  );
+  riga1.append(creaSegno(indice), etichettaColonna(colonna));
   contenitore.appendChild(riga1);
 
   // A course name alone does not say where the course is taught.
@@ -791,9 +895,6 @@ function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate, inCa
     const n = numerosita.get(indagine);
     if (!n || n.laureati == null) continue;
     const riga = document.createElement('small');
-    riga.style.color = 'var(--testo-tenue)';
-    riga.style.fontWeight = '400';
-    riga.style.display = 'block';
     riga.textContent =
       indagine === 'occupazione'
         ? `${formattaNumero(n.laureati)} laureati · ${formattaNumero(n.compilatori)} intervistati`
@@ -887,10 +988,93 @@ function aggiornaLegendaCampione(quante) {
   elLegendaCampione.classList.toggle('nascosto', quante === 0);
   if (quante === 0) return;
   elLegendaCampione.textContent =
-    `\u2731 Valore basato su meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: ` +
+    `* Valore basato su meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: ` +
     'campione piccolo, differenze piccole fra colonne non sono significative. ' +
     'Passa il mouse su una cella per la numerosit\u00e0 esatta.';
 }
+
+/**
+ * Marks in bold the highest value of a table row.
+ *
+ * Only numeric values compete, and only when at least two columns have one
+ * and they are not all equal: a lone value or a tie has no "highest". The
+ * note under the table says that highest does not mean best.
+ *
+ * @param {{td: HTMLElement, valore: (number|null|undefined)}[]} celle - Cells of one row.
+ */
+function segnaMassimo(celle) {
+  const numeriche = celle.filter((c) => typeof c.valore === 'number');
+  if (numeriche.length < 2) return;
+  const massimo = Math.max(...numeriche.map((c) => c.valore));
+  if (numeriche.every((c) => c.valore === massimo)) return;
+  for (const c of numeriche) if (c.valore === massimo) c.td.classList.add('alto');
+}
+
+/** Name of the survey's respondents, as a warning sentence uses it. */
+const AMBITO_INDAGINE = { profilo: 'sul questionario', occupazione: 'sul lavoro' };
+
+/**
+ * Writes the warnings about the comparison as a whole, or hides the box.
+ *
+ * Two cases: course columns (first-level graduates only) next to university
+ * or group columns (all degree types together), and columns whose sample in
+ * one survey is below SOGLIA_CAMPIONE_PICCOLO. Names are inserted as text,
+ * never as HTML: course names come from an external source.
+ *
+ * @param {object[]} datiPerColonna - Data of each comparison column.
+ */
+function aggiornaAvvisi(datiPerColonna) {
+  const avvisi = [];
+  const corsi = datiPerColonna.filter((d) => d.colonna.tipo === 'corso');
+  if (corsi.length > 0 && corsi.length < datiPerColonna.length) {
+    avvisi.push([
+      el('strong', {}, 'Colonne di tipo diverso.'),
+      ' I corsi contano solo laureati di primo livello; atenei e gruppi mettono ' +
+      'insieme triennali, magistrali e ciclo unico. Sul lavoro non sono gruppi ' +
+      'uguali: molti triennalisti stanno ancora studiando.',
+    ]);
+  }
+  for (const { colonna, numerosita, inCaricamento } of datiPerColonna) {
+    if (inCaricamento || colonna.errore) continue;
+    for (const indagine of ['profilo', 'occupazione']) {
+      const campione = campioneDellaRiga(numerosita, indagine);
+      if (!campionePiccolo(campione)) continue;
+      avvisi.push([
+        el('strong', {}, `Campione piccolo per ${etichettaColonna(colonna)} ${AMBITO_INDAGINE[indagine]}.`),
+        ` ${formattaNumero(campione.numero)} ${campione.nome}, sotto la soglia di ` +
+        `${SOGLIA_CAMPIONE_PICCOLO}: questi numeri oscillano molto da un anno all'altro.`,
+      ]);
+    }
+  }
+  elAvvisi.classList.toggle('nascosto', avvisi.length === 0);
+  elAvvisiTitolo.textContent = avvisi.length === 1
+    ? '1 avviso su questo confronto'
+    : `${avvisi.length} avvisi su questo confronto`;
+  elAvvisiLista.replaceChildren(...avvisi.map((parti) => el('li', {}, ...parti)));
+}
+
+// The full table stays hidden until the first press of "Confronta"; from then
+// on it follows every change by itself, so it can never show numbers that no
+// longer match the menus.
+let risultatoMostrato = false;
+
+/**
+ * Shows the full table, the first time replacing the button with a note.
+ *
+ * @param {boolean} scorri - Scroll the table into view.
+ */
+function mostraRisultato(scorri) {
+  if (!risultatoMostrato) {
+    risultatoMostrato = true;
+    elRisultato.classList.remove('nascosto');
+    elAzioneConfronta.replaceChildren(
+      el('p', { class: 'dal-vivo' }, 'Da qui in poi il confronto si aggiorna da solo a ogni modifica.')
+    );
+  }
+  if (scorri) elRisultato.scrollIntoView({ block: 'start' });
+}
+
+document.getElementById('btn-confronta').addEventListener('click', () => mostraRisultato(true));
 
 /** Renders the comparison table from the current selections and database. */
 function renderTabella() {
@@ -917,8 +1101,7 @@ function renderTabella() {
 
   // The selector boxes follow the column order, which removals change.
   colonne.forEach((c, i) => {
-    const pallino = elColonneSchede.querySelector(`[data-id="${c.id}"] .pallino-colonna`);
-    if (pallino) pallino.style.background = coloreColonna(i);
+    elColonneSchede.querySelector(`[data-id="${c.id}"] .posto-segno`)?.replaceChildren(creaSegno(i));
   });
 
   if (colonne.length === 0) {
@@ -928,17 +1111,19 @@ function renderTabella() {
     tr.appendChild(td);
     elTabellaBody.appendChild(tr);
     renderSintesi([]);
+    aggiornaAvvisi([]);
     return;
   }
 
   // Query each column once rather than issuing one query per question. The
-  // summary cards read the same data, so they can never disagree with the table.
-  const datiPerColonna = colonne.map((colonna, i) => ({
+  // summary reads the same data, so it can never disagree with the table.
+  const datiPerColonna = colonne.map((colonna, indice) => ({
     colonna,
-    colore: coloreColonna(i),
+    indice,
     ...interrogaScheda(colonna),
   }));
   renderSintesi(datiPerColonna);
+  aggiornaAvvisi(datiPerColonna);
 
   // Determine selected questions before rendering the header to identify which
   // surveys will appear and which sample sizes belong below each column name.
@@ -956,10 +1141,10 @@ function renderTabella() {
   thDomanda.className = 'colonna-domanda';
   thDomanda.textContent = 'Domanda';
   trHead.appendChild(thDomanda);
-  for (const { colonna, colore, numerosita, inCaricamento } of datiPerColonna) {
+  for (const { colonna, indice, numerosita, inCaricamento } of datiPerColonna) {
     const th = document.createElement('th');
     th.appendChild(
-      formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate, inCaricamento, colore)
+      formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate, inCaricamento, indice)
     );
     trHead.appendChild(th);
   }
@@ -992,16 +1177,20 @@ function renderTabella() {
         tr.className = 'riga-domanda-intestazione';
         tr.appendChild(creaCellaTesto(voce.label, 'colonna-domanda'));
         const k = chiave(voce.indagine, voce.categoria, voce.indicatori[0]);
+        const celle = [];
         for (const { colonna, mappa, numerosita } of datiPerColonna) {
           if (voce.soloCorso && colonna.tipo !== 'corso') {
             tr.appendChild(creaCellaSoloCorso());
             continue;
           }
           const campione = campioneDellaRiga(numerosita, voce.indagine);
-          const cella = creaCellaValore(mappa.get(k), campione);
+          const info = mappa.get(k);
+          const cella = creaCellaValore(info, campione);
           if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
+          celle.push({ td: cella, valore: info?.valore });
           tr.appendChild(cella);
         }
+        segnaMassimo(celle);
         elTabellaBody.appendChild(tr);
       } else {
         // Multi-option question: a title row without values followed by one
@@ -1019,16 +1208,20 @@ function renderTabella() {
           tr.className = 'riga-indicatore';
           tr.appendChild(creaCellaTesto(indicatore, 'colonna-domanda'));
           const k = chiave(voce.indagine, voce.categoria, indicatore);
+          const celle = [];
           for (const { colonna, mappa, numerosita } of datiPerColonna) {
             if (voce.soloCorso && colonna.tipo !== 'corso') {
               tr.appendChild(creaCellaSoloCorso());
               continue;
             }
             const campione = campioneDellaRiga(numerosita, voce.indagine);
-            const cella = creaCellaValore(mappa.get(k), campione);
+            const info = mappa.get(k);
+            const cella = creaCellaValore(info, campione);
             if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
+            celle.push({ td: cella, valore: info?.valore });
             tr.appendChild(cella);
           }
+          segnaMassimo(celle);
           elTabellaBody.appendChild(tr);
         }
       }
@@ -1038,9 +1231,11 @@ function renderTabella() {
   aggiornaLegendaCampione(sottoSoglia);
 }
 
-// --- 5b. Summary cards ("In sintesi") ---
-// Six key questions (js/indicatori-chiave.js) for the columns of the
-// comparison, drawn from the same per-column data as the table.
+// --- 5b. The ruler: summary ("In sintesi") and course sheet rows ---
+// One visual language for key numbers: a row per indicator with the question,
+// a line on a fixed scale carrying one marker per column, and the values.
+// The summary draws it for the columns of the comparison, the course sheet
+// for the course, its university and its group.
 
 /**
  * Returns the text of one key value.
@@ -1056,86 +1251,112 @@ function testoValoreChiave(info, unita) {
 }
 
 /**
- * Returns the sample line under a card: one count per column, in column order.
- *
- * @param {(object|null)[]} campioni - Sample of each column, from campioneDellaRiga().
- * @returns {string} Sample line.
+ * @typedef {object} EntitaRighello
+ * @property {string} chiave - Stable identifier, written in data-entita.
+ * @property {number} indice - Marker position (shape and tone).
+ * @property {string} nome - Full name, for tooltips.
+ * @property {string} breve - Short name, above the values or beside them on a phone.
+ * @property {{mappa:Map, numerosita:Map}|null} dati - Sheet data, or null when absent.
+ * @property {string|null} [assente] - Text shown instead of a value (loading, error).
  */
-function testoCampioniSintesi(campioni) {
-  const noti = campioni.filter(Boolean);
-  if (noti.length === 0) return '';
-  const nomi = new Set(noti.map((c) => c.nome));
-  const numeri = campioni.map((c) => {
-    if (!c) return '—';
-    return nomi.size === 1 ? formattaNumero(c.numero) : `${formattaNumero(c.numero)} ${c.nome}`;
+
+/**
+ * Creates one row of the ruler: an indicator for every entity.
+ *
+ * @param {object} ind - Indicator from indicatori-chiave.js.
+ * @param {EntitaRighello[]} entita - Entities, in marker order.
+ * @returns {{riga: HTMLElement, piccoli: boolean[]}} Row, and per entity whether its value rests on a small sample.
+ */
+function creaRigaRighello(ind, entita) {
+  const k = chiave(ind.indagine, ind.categoria, ind.indicatore);
+  const letture = entita.map((e) => {
+    const info = e.assente ? undefined : e.dati?.mappa.get(k);
+    const campione = !e.assente && e.dati ? campioneDellaRiga(e.dati.numerosita, ind.indagine) : null;
+    return {
+      e,
+      info,
+      campione,
+      piccolo: campionePiccolo(campione),
+      haValore: info?.valore !== null && info?.valore !== undefined,
+    };
   });
-  let testo = `Campione: ${numeri.join(' · ')}${nomi.size === 1 ? ` ${noti[0].nome}` : ''}.`;
-  if (noti.some(campionePiccolo)) {
-    testo += ` ✱ Sotto i ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: leggi con prudenza.`;
-  }
-  return testo;
+  const scala = scalaPer(ind.unita, letture.filter((l) => l.haValore).map((l) => l.info.valore));
+  const [estremoMin, estremoMax] = etichetteScala(scala, ind.unita);
+
+  // Drawn back to front, so the first entity's marker always sits on top.
+  const segni = [...letture].reverse().filter((l) => l.haValore).map((l) => {
+    const segno = creaSegno(l.e.indice, l.piccolo,
+      `${l.e.nome}: ${formattaConUnita(l.info.valore, ind.unita)}`);
+    segno.style.left = `${posizioneSu(l.info.valore, scala)}%`;
+    return segno;
+  });
+
+  const valori = letture.map((l) =>
+    el('span', {
+      class: `paragone-valore${l.haValore ? '' : ' paragone-nota'}` +
+        `${l.piccolo ? ' valore-campione-piccolo' : ''}`,
+      'data-entita': l.e.chiave,
+      title: l.campione ? testoCampione(l.campione) : null,
+    },
+      creaSegno(l.e.indice, l.piccolo),
+      el('span', { class: 'paragone-valore-nome' }, l.e.breve),
+      el('span', { class: 'paragone-numero' }, l.e.assente ?? testoValoreChiave(l.info, ind.unita))
+    )
+  );
+
+  const riga = el('div', { class: 'paragone-riga', 'data-indicatore': ind.id },
+    el('div', { class: 'paragone-etichetta' },
+      el('span', { class: 'paragone-titolo' }, ind.titolo),
+      el('span', { class: 'paragone-domanda' }, etichettaUfficiale(ind))
+    ),
+    el('div', { class: 'paragone-traccia', 'aria-hidden': 'true' },
+      el('div', { class: 'traccia' }, ...segni),
+      el('div', { class: 'traccia-estremi' }, el('span', {}, estremoMin), el('span', {}, estremoMax))
+    ),
+    el('div', { class: 'paragone-valori' }, ...valori)
+  );
+  return { riga, piccoli: letture.map((l) => l.piccolo) };
 }
 
 /**
- * Creates the card of one key indicator.
+ * Fills a ruler container: a header with the entity names, then one row per
+ * indicator. On a phone the header is hidden and every value carries its name.
  *
- * @param {object} ind - Indicator from indicatori-chiave.js.
- * @param {object[]} datiPerColonna - Data of each comparison column.
- * @returns {HTMLElement} Card.
+ * @param {HTMLElement} contenitore - Element with class "righe".
+ * @param {object[]} indicatori - Indicators from indicatori-chiave.js.
+ * @param {EntitaRighello[]} entita - Entities, in marker order.
+ * @returns {boolean[][]} For every row, per entity, whether its value rests on a small sample.
  */
-function creaCartaIndicatore(ind, datiPerColonna) {
-  const k = chiave(ind.indagine, ind.categoria, ind.indicatore);
-  const valori = datiPerColonna
-    .map((d) => d.mappa.get(k)?.valore)
-    .filter((v) => v !== null && v !== undefined);
-  const scala = scalaPer(ind.unita, valori);
-  const campioni = [];
-
-  const righe = datiPerColonna.map(({ colonna, colore, mappa, numerosita, inCaricamento }) => {
-    const info = mappa.get(k);
-    const campione = campioneDellaRiga(numerosita, ind.indagine);
-    campioni.push(campione);
-    const haValore = !inCaricamento && info?.valore !== null && info?.valore !== undefined;
-
-    let testo;
-    if (colonna.tipo === 'corso' && colonna.errore) testo = 'non disponibile';
-    else if (inCaricamento) testo = 'caricamento…';
-    else testo = testoValoreChiave(info, ind.unita);
-
-    const nome = el('span', { class: 'kpi-nome' },
-      el('span', { class: 'pallino-colonna', style: { background: colore }, 'aria-hidden': 'true' }),
-      etichettaColonna(colonna),
-      colonna.tipo === 'corso'
-        ? el('small', {}, ` · ${etichettaCodice('ateneo', colonna.ateneo)}`)
-        : null
-    );
-    const valore = el('span', {
-      class: haValore ? 'kpi-valore' : 'kpi-valore kpi-nota',
-      title: campione ? testoCampione(campione) : null,
-    }, testo);
-    const barra = el('div', { class: 'kpi-barra', 'aria-hidden': 'true' },
-      haValore
-        ? el('span', { style: { width: `${posizioneSu(info.valore, scala)}%`, background: colore } })
-        : null
-    );
-    return el('li', { class: campionePiccolo(campione) ? 'kpi-riga kpi-campione-piccolo' : 'kpi-riga' },
-      el('div', { class: 'kpi-riga-testa' }, nome, valore),
-      barra
-    );
-  });
-
-  return el('article', { class: 'kpi', 'data-indicatore': ind.id },
-    el('p', { class: 'kpi-momento' }, ind.momento),
-    el('h3', { class: 'kpi-titolo' }, ind.titolo),
-    el('p', { class: 'kpi-domanda' }, etichettaUfficiale(ind)),
-    el('ul', { class: 'kpi-righe' }, ...righe),
-    el('p', { class: 'kpi-campione' }, testoCampioniSintesi(campioni))
+function disegnaRighello(contenitore, indicatori, entita) {
+  contenitore.style.setProperty('--n-valori', String(entita.length));
+  const intestazione = el('div', { class: 'paragone-riga paragone-intestazione', 'aria-hidden': 'true' },
+    el('span', {}), el('span', {}),
+    el('div', { class: 'paragone-valori' }, ...entita.map((e) =>
+      el('span', { class: 'intestazione-valore', title: e.nome }, creaSegno(e.indice), el('span', {}, e.breve))))
   );
+  const piccoli = [];
+  const righe = indicatori.map((ind) => {
+    const { riga, piccoli: p } = creaRigaRighello(ind, entita);
+    piccoli.push(p);
+    return riga;
+  });
+  contenitore.replaceChildren(intestazione, ...righe);
+  return piccoli;
 }
 
-/** Writes which definition of "employed" the employment cards use. */
-function aggiornaNotaSintesi() {
+/**
+ * Writes the note under the summary: the small-sample asterisk, when some
+ * value carries it, and which definition of "employed" the work rows use.
+ *
+ * @param {boolean} conPiccoli - Whether some value rests on a small sample.
+ */
+function aggiornaNotaSintesi(conPiccoli) {
   elNotaSintesi.replaceChildren();
+  if (conPiccoli) {
+    elNotaSintesi.append(
+      `* Meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: il valore oscilla molto da un anno all'altro. `
+    );
+  }
   if (definizioniDisponibili.length < 2) return;
   const cambia = el('button', { type: 'button', class: 'link-pulsante' }, 'si cambia qui');
   cambia.addEventListener('click', () => {
@@ -1150,21 +1371,34 @@ function aggiornaNotaSintesi() {
 }
 
 /**
- * Renders the summary cards for the current columns.
+ * Renders the summary for the current columns.
  *
  * @param {object[]} datiPerColonna - Data of each comparison column, as renderTabella() reads it.
  */
 function renderSintesi(datiPerColonna) {
-  aggiornaNotaSintesi();
   if (datiPerColonna.length === 0) {
+    aggiornaNotaSintesi(false);
     elGrigliaSintesi.replaceChildren(
       el('p', { class: 'sintesi-vuota' }, 'Aggiungi almeno una colonna per vedere la sintesi.')
     );
     return;
   }
-  elGrigliaSintesi.replaceChildren(
-    ...INDICATORI_CRUSCOTTO.map((ind) => creaCartaIndicatore(ind, datiPerColonna))
-  );
+  const entita = datiPerColonna.map(({ colonna, indice, mappa, numerosita, inCaricamento }) => {
+    const nome = etichettaColonna(colonna);
+    let assente = null;
+    if (colonna.tipo === 'corso' && colonna.errore) assente = 'non disponibile';
+    else if (inCaricamento) assente = 'caricamento…';
+    return {
+      chiave: colonna.id,
+      indice,
+      nome: colonna.tipo === 'corso' ? `${nome}, ${etichettaCodice('ateneo', colonna.ateneo)}` : nome,
+      breve: nome,
+      dati: { mappa, numerosita },
+      assente,
+    };
+  });
+  const piccoli = disegnaRighello(elGrigliaSintesi, INDICATORI_CRUSCOTTO, entita);
+  aggiornaNotaSintesi(piccoli.some((riga) => riga.some(Boolean)));
 }
 
 // --- 5c. Course sheet ("Scheda del corso") ---
@@ -1240,76 +1474,6 @@ async function apriScheda(ateneo, corso) {
 }
 
 /**
- * Creates the shape of a marker: circle for the course, diamond for the
- * university, square for the group. Shapes, not only colours, tell the three
- * apart.
- *
- * @param {string} forma - 'cerchio', 'rombo' or 'quadrato'.
- * @returns {HTMLElement} Marker shape for the legend.
- */
-function creaSegnoLegenda(forma) {
-  return el('span', { class: `segno-legenda segno-${forma}`, 'aria-hidden': 'true' });
-}
-
-/**
- * Creates one row of the course sheet: an indicator for the three sheets.
- *
- * @param {object} ind - Indicator from indicatori-chiave.js.
- * @param {object[]} entita - The course, university and group, with their data.
- * @returns {{riga: HTMLElement, piccolo: boolean}} Row, and whether the course value rests on a small sample.
- */
-function creaRigaParagone(ind, entita) {
-  const k = chiave(ind.indagine, ind.categoria, ind.indicatore);
-  const letture = entita.map((e) => {
-    const info = e.dati?.mappa.get(k);
-    const campione = e.dati ? campioneDellaRiga(e.dati.numerosita, ind.indagine) : null;
-    return {
-      e,
-      info,
-      campione,
-      piccolo: campionePiccolo(campione),
-      haValore: info?.valore !== null && info?.valore !== undefined,
-    };
-  });
-  const scala = scalaPer(ind.unita, letture.filter((l) => l.haValore).map((l) => l.info.valore));
-  const [estremoMin, estremoMax] = etichetteScala(scala, ind.unita);
-
-  // Drawn back to front, so the course marker always sits on top.
-  const segni = [...letture].reverse().filter((l) => l.haValore).map((l) =>
-    el('span', {
-      class: `segno segno-${l.e.forma}${l.piccolo ? ' segno-incerto' : ''}`,
-      style: { left: `${posizioneSu(l.info.valore, scala)}%` },
-      title: `${l.e.nome}: ${formattaConUnita(l.info.valore, ind.unita)}`,
-    })
-  );
-
-  const valori = letture.map((l) =>
-    el('span', {
-      class: `paragone-valore${l.haValore ? '' : ' paragone-nota'}` +
-        `${l.piccolo ? ' valore-campione-piccolo' : ''}`,
-      'data-entita': l.e.chiave,
-      title: l.campione ? testoCampione(l.campione) : null,
-    },
-      el('span', { class: 'paragone-valore-nome' }, l.e.breve),
-      el('span', { class: 'paragone-numero' }, testoValoreChiave(l.info, ind.unita))
-    )
-  );
-
-  const riga = el('div', { class: 'paragone-riga', 'data-indicatore': ind.id },
-    el('div', { class: 'paragone-etichetta' },
-      el('span', { class: 'paragone-titolo' }, ind.titolo),
-      el('span', { class: 'paragone-domanda' }, etichettaUfficiale(ind))
-    ),
-    el('div', { class: 'paragone-traccia', 'aria-hidden': 'true' },
-      el('div', { class: 'traccia' }, ...segni),
-      el('div', { class: 'traccia-estremi' }, el('span', {}, estremoMin), el('span', {}, estremoMax))
-    ),
-    el('div', { class: 'paragone-valori' }, ...valori)
-  );
-  return { riga, piccolo: letture[0].piccolo };
-}
-
-/**
  * Creates the box that states the samples behind the course values.
  *
  * @param {Map} numerosita - Sample sizes of the course, by survey.
@@ -1325,7 +1489,7 @@ function creaRiquadroCampione(numerosita) {
         formattaNumero(n))
     );
 
-  const riquadro = el('section', { class: 'pannello riquadro-campione' },
+  const riquadro = el('section', { class: 'riquadro-campione' },
     el('h3', {}, 'Su quanti dati si basa il corso'),
     el('dl', {},
       voce('Laureati', profilo?.laureati),
@@ -1333,8 +1497,8 @@ function creaRiquadroCampione(numerosita) {
       voce('Intervistati sul lavoro', occupazione?.compilatori)
     ),
     el('p', { class: 'nota-riquadro' },
-      `Sotto i ${SOGLIA_CAMPIONE_PICCOLO} rispondenti un valore del corso è segnato con ✱: ` +
-      'su così pochi casi una percentuale è instabile.')
+      `Il segno pieno vuol dire almeno ${SOGLIA_CAMPIONE_PICCOLO} rispondenti; quello vuoto, ` +
+      'con l\'asterisco sul valore, meno: su così pochi casi una percentuale è instabile.')
   );
 
   if (definizioniDisponibili.length >= 2) {
@@ -1362,6 +1526,8 @@ function confrontaSchedaSuTutto() {
   creaColonna('corso', corso, ateneo);
   creaColonna('ateneo', ateneo);
   if (codiciGruppo.includes(gruppo)) creaColonna('gruppo', gruppo);
+  // Asking for every question is asking to compare: the table opens.
+  mostraRisultato(false);
   renderTabella();
   location.hash = '#confronto';
 }
@@ -1409,13 +1575,12 @@ function renderScheda() {
   const nomeGruppo = gruppo ? etichettaCodice('gruppo', gruppo) : null;
 
   const identita = el('div', { class: 'scheda-identita' },
-    el('p', { class: 'scheda-briciole' }, nomeGruppo ? `${nomeAteneo} › ${nomeGruppo}` : nomeAteneo),
-    el('h2', { class: 'scheda-titolo' }, NOMI_CORSO[ateneo][corso]),
-    el('ul', { class: 'scheda-etichette' },
-      el('li', {}, `Ateneo: ${nomeAteneo}`),
-      NOME_TIPO_CORSO[tipoCorso] ? el('li', {}, NOME_TIPO_CORSO[tipoCorso]) : null,
-      nomeGruppo ? el('li', {}, `Area: ${nomeGruppo}`) : null
-    )
+    el('p', { class: 'scheda-briciole scheda-etichette' },
+      el('span', {}, nomeAteneo),
+      nomeGruppo ? el('span', {}, nomeGruppo) : null,
+      NOME_TIPO_CORSO[tipoCorso] ? el('span', {}, NOME_TIPO_CORSO[tipoCorso]) : null
+    ),
+    el('h2', { class: 'scheda-titolo' }, NOMI_CORSO[ateneo][corso])
   );
 
   if (statoScheda.inCaricamento) {
@@ -1440,49 +1605,41 @@ function renderScheda() {
   }
 
   const datiCorso = costruisciScheda(interrogaCorso(dbAteneo, corso, definizioneScelta));
+  // Same markers as the first three columns of a comparison: the course is
+  // the circle, its university the diamond, its group the square.
   const entita = [
-    { chiave: 'corso', nome: 'Il corso', breve: 'Corso', forma: 'cerchio', dati: datiCorso },
+    { chiave: 'corso', indice: 0, nome: 'Il corso', breve: 'Corso', dati: datiCorso },
     {
-      chiave: 'ateneo', nome: `Ateneo: ${nomeAteneo}`, breve: nomeAteneo, forma: 'rombo',
+      chiave: 'ateneo', indice: 1, nome: `Ateneo: ${nomeAteneo}`, breve: nomeAteneo,
       dati: interrogaScheda({ tipo: 'ateneo', codice: ateneo }),
     },
     {
-      chiave: 'area', nome: nomeGruppo ? `Area ${nomeGruppo}, tutta Italia` : 'Area', breve: 'Area',
-      forma: 'quadrato',
+      chiave: 'area', indice: 2, nome: nomeGruppo ? `Area ${nomeGruppo}, tutta Italia` : 'Area',
+      breve: 'Area',
       dati: codiciGruppo.includes(gruppo) ? interrogaScheda({ tipo: 'gruppo', codice: gruppo }) : null,
     },
   ];
 
-  const btnTutto = el('button', { type: 'button', class: 'pulsante-primario' },
+  const btnTutto = el('button', { type: 'button', class: 'btn-pri' },
     'Confronta su tutte le domande');
   btnTutto.addEventListener('click', confrontaSchedaSuTutto);
-  const btnAggiungi = el('button', { type: 'button', class: 'pulsante-secondario' },
+  const btnAggiungi = el('button', { type: 'button', class: 'btn-sec' },
     'Aggiungi al confronto');
   btnAggiungi.addEventListener('click', aggiungiSchedaAlConfronto);
-  const btnLink = el('button', { type: 'button', class: 'pulsante-secondario' }, 'Copia il link');
+  const btnLink = el('button', { type: 'button', class: 'btn-sec' }, 'Copia il link');
   btnLink.addEventListener('click', () => copiaLinkScheda(btnLink));
 
-  let piccoli = 0;
-  const righe = [...INDICATORI_CRUSCOTTO, ...INDICATORI_SOLO_SCHEDA].map((ind) => {
-    const { riga, piccolo } = creaRigaParagone(ind, entita);
-    if (piccolo) piccoli++;
-    return riga;
-  });
+  const elRighe = el('div', { class: 'righe' });
+  const piccoli = disegnaRighello(elRighe, [...INDICATORI_CRUSCOTTO, ...INDICATORI_SOLO_SCHEDA], entita);
 
-  const paragone = el('section', { class: 'pannello scheda-paragone' },
-    el('div', { class: 'paragone-testa' },
-      el('h3', {}, 'Il corso accanto ai suoi termini di paragone'),
-      el('ul', { class: 'paragone-legenda' },
-        ...entita.map((e) => el('li', {}, creaSegnoLegenda(e.forma), e.nome)))
-    ),
-    el('div', { class: 'paragone-riga paragone-intestazione', 'aria-hidden': 'true' },
-      el('span', {}), el('span', {}),
-      el('div', { class: 'paragone-valori' }, ...entita.map((e) => el('span', {}, e.breve)))
-    ),
-    ...righe,
-    piccoli > 0
-      ? el('p', { class: 'legenda-campione' },
-        `✱ Valore del corso basato su meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: ` +
+  const paragone = el('section', { class: 'scheda-paragone' },
+    el('h2', {}, 'Il corso accanto ai suoi termini di paragone'),
+    el('ul', { class: 'paragone-legenda' },
+      ...entita.map((e) => el('li', {}, creaSegno(e.indice), e.nome))),
+    elRighe,
+    piccoli.some((riga) => riga[0])
+      ? el('p', { class: 'nota' },
+        `* Valore del corso basato su meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: ` +
         'le differenze piccole con ateneo e area non sono significative.')
       : null
   );
@@ -1710,6 +1867,8 @@ const elAiModel = document.getElementById('ai-model');
 const elAiKey = document.getElementById('ai-key');
 const elAiDimentica = document.getElementById('ai-dimentica');
 const elAiAiuto = document.getElementById('ai-aiuto');
+const elDlgAi = document.getElementById('dlg-ai');
+const elAiEsito = document.getElementById('ai-esito');
 
 // An address on the user's machine usually means a network error indicates a
 // missing permission rather than an unavailable server.
@@ -1826,6 +1985,8 @@ function applicaQuery({ colonne: colonneQuery, domande }) {
     }
     aggiornaTuttiIConteggi();
   }
+  // A request to the AI is a request to compare: the table opens.
+  mostraRisultato(false);
   renderTabella();
 }
 
@@ -1852,6 +2013,11 @@ async function inviaFraseAi() {
     let msg = query.nota || 'Confronto impostato.';
     if (scartati > 0) msg += ` (${scartati} scelte non valide sono state ignorate.)`;
     mostraStatoAi(msg, 'ok');
+    // The dialog closes on the result; the AI's note stays on the page, next
+    // to the columns it chose.
+    elAiEsito.textContent = `Impostato dall'AI: ${msg}`;
+    elAiEsito.classList.remove('nascosto');
+    elDlgAi.close();
   } catch (errore) {
     const diagnosi = diagnosticaConnessione(errore, config.baseUrl);
     if (diagnosi) {
@@ -1874,6 +2040,14 @@ if (elAiInvia) {
   // wrong origin authorizes nothing, so write it at runtime rather than in HTML.
   for (const el of document.querySelectorAll('.ai-origine')) {
     el.textContent = location.origin;
+  }
+
+  document.getElementById('apri-ai').addEventListener('click', () => {
+    elDlgAi.showModal();
+    elAiFrase.focus();
+  });
+  for (const id of ['chiudi-ai', 'annulla-ai']) {
+    document.getElementById(id).addEventListener('click', () => elDlgAi.close());
   }
 
   elAiPreset.addEventListener('change', () => {

@@ -164,7 +164,9 @@ export function posizioneSu(valore, scala) {
  *
  * Euros are published by AlmaLaurea as whole numbers and read better with a
  * thousands separator; everything else keeps the single decimal the source
- * provides, exactly as the comparison table shows it.
+ * provides, exactly as the comparison table shows it. The separator is forced
+ * (`useGrouping: 'always'`): Italian locale data leaves four-digit numbers
+ * ungrouped by default, so 1530 would print without its point.
  *
  * @param {number} valore - Value from the dataset.
  * @param {string} unita - Unit of the indicator.
@@ -172,7 +174,7 @@ export function posizioneSu(valore, scala) {
  */
 export function formattaConUnita(valore, unita) {
   if (unita === 'euro') {
-    return `${valore.toLocaleString('it-IT', { maximumFractionDigits: 1 })} €`;
+    return `${valore.toLocaleString('it-IT', { maximumFractionDigits: 1, useGrouping: 'always' })} €`;
   }
   const numero = valore.toFixed(1).replace('.', ',');
   switch (unita) {
@@ -193,7 +195,7 @@ export function etichetteScala(scala, unita) {
   const f = (v) => {
     switch (unita) {
       case '%': return `${v}%`;
-      case 'euro': return `${v.toLocaleString('it-IT')} €`;
+      case 'euro': return `${v.toLocaleString('it-IT', { useGrouping: 'always' })} €`;
       case 'mesi': return `${v} mesi`;
       default: return String(v);
     }
