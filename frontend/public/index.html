@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="it" data-modo="base">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,28 +8,58 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
+<!-- The theme chosen with the header button is applied before the first
+     paint, so a dark page never flashes white. Storage can be unavailable;
+     the theme then simply follows the system. -->
+<script>
+  try {
+    const tema = localStorage.getItem('almalaurea-tema');
+    if (tema === 'chiaro' || tema === 'scuro') document.documentElement.dataset.tema = tema;
+  } catch { /* Storage is optional. */ }
+</script>
 <!-- sql.js is loaded via CDN, so no bundler is required. Version 1.14.0 is
      pinned; the external library is updated manually when needed, not at runtime. -->
 <script src="https://cdn.jsdelivr.net/npm/sql.js@1.14.0/dist/sql-wasm.js"></script>
 </head>
 <body>
 
+<!-- The header is a bar floating above the page. On a phone its navigation
+     moves to a pill fixed at the bottom of the screen (style.css). -->
 <header class="testata">
-  <div class="contenitore testata-riga">
+  <div class="testata-barra">
     <div class="marchio">
       <h1>Confronta i dati dei laureati</h1>
-      <p>Dati ufficiali AlmaLaurea 2025, nessun numero ricalcolato</p>
+      <p>Dati ufficiali AlmaLaurea 2025</p>
     </div>
-    <button id="apri-ai" class="btn-ai" type="button" aria-haspopup="dialog">
-      <span aria-hidden="true">✦</span><span class="testo">Chiedi all'AI</span>
+    <!-- The two views are plain links to a hash (#confronto, #scheda/...), so
+         a course sheet has an address that can be shared or bookmarked. -->
+    <nav class="navigazione" aria-label="Viste">
+      <a id="tab-confronto" class="voce-nav" href="#confronto" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>
+        <span>Confronto</span>
+      </a>
+      <a id="tab-scheda" class="voce-nav" href="#scheda">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>
+        <span class="testo-lungo">Scheda del corso</span><span class="testo-corto">Scheda</span>
+      </a>
+      <button id="apri-ai" class="voce-nav" type="button" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+        <span class="testo-lungo">Chiedi all'AI</span><span class="testo-corto">AI</span>
+      </button>
+    </nav>
+    <!-- Base shows a 0-10 score per question; Completa shows the published
+         values, the question filters and the full table. -->
+    <div class="modo">
+      <span id="etichetta-base" class="modo-etichetta" data-attiva="true">Base</span>
+      <button id="modo" class="interruttore" type="button" role="switch" aria-checked="false"
+        aria-labelledby="etichetta-completa"></button>
+      <span id="etichetta-completa" class="modo-etichetta" data-attiva="false">Completa</span>
+    </div>
+    <button id="tema" class="btn-tema" type="button" aria-label="Passa al tema scuro">
+      <svg class="sole" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="luna" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
     </button>
   </div>
-  <!-- The two views are plain links to a hash (#confronto, #scheda/...), so
-       a course sheet has an address that can be shared or bookmarked. -->
-  <nav class="contenitore schede-vista" aria-label="Viste">
-    <a id="tab-confronto" class="scheda-vista" href="#confronto" aria-current="page">Confronto</a>
-    <a id="tab-scheda" class="scheda-vista" href="#scheda">Scheda del corso</a>
-  </nav>
 </header>
 
 <main class="contenitore">
@@ -44,7 +74,7 @@
 
     <section class="sezione">
       <h2>Cosa vuoi confrontare?</h2>
-      <p class="sotto">Atenei, gruppi disciplinari o singoli corsi.</p>
+      <p class="sotto">Scegli un ateneo e, se vuoi, un suo corso; oppure un'area disciplinare in tutta Italia.</p>
       <div class="colonne-riga">
         <div id="colonne-schede" class="colonne-schede"></div>
         <button id="btn-aggiungi-colonna" type="button" class="aggiungi">+ Aggiungi colonna</button>
@@ -58,9 +88,40 @@
       </details>
     </section>
 
+    <!-- Base view: a 0-10 score per key question (js/voto.js). app.js fills
+         the rows on every redraw, from the same data as the table. -->
+    <section class="sezione solo-base" aria-labelledby="titolo-voti">
+      <h2 id="titolo-voti">Come se la cavano</h2>
+      <p class="sotto">
+        Un voto da 0 a 10 per ogni domanda: dice quanti termini di paragone
+        simili battono. I valori pubblicati stanno nella versione Completa.
+      </p>
+      <div id="griglia-voti" class="voti"></div>
+      <p id="paragone-voti" class="nota"></p>
+      <details class="come-voto">
+        <summary>Come si calcola il voto?</summary>
+        <ul>
+          <li><strong>È una posizione, non un giudizio.</strong> «Meglio di 7 su 10»
+            vuol dire che, messi in fila i termini di paragone, questo ne batte 7
+            su 10. Il voto è esattamente quella frase.</li>
+          <li><strong>Si confronta con chi è simile.</strong> Un ateneo con gli altri
+            atenei, un'area con le altre aree, un corso triennale con i corsi
+            triennali delle aree presenti nel confronto. Tutti con almeno 40 risposte.</li>
+          <li><strong>A volte il voto non c'è, apposta.</strong> Sotto le 40 risposte i
+            numeri cambiano troppo da un anno all'altro; quando quasi tutti sono
+            uguali, un voto ingrandirebbe differenze che non esistono.</li>
+          <li><strong>Per i corsi triennali conta chi lavora o studia ancora.</strong>
+            Chi dopo la triennale si iscrive alla magistrale risulta «non occupato»,
+            e non è un esito cattivo.</li>
+          <li><strong>Nessun numero inventato.</strong> I valori sono quelli ufficiali
+            AlmaLaurea; il voto dice solo dove stanno.</li>
+        </ul>
+      </details>
+    </section>
+
     <!-- Key questions for the columns above, on fixed scales. app.js fills
          the rows from js/indicatori-chiave.js on every redraw of the table. -->
-    <section class="sezione" aria-labelledby="titolo-sintesi">
+    <section class="sezione solo-completa" aria-labelledby="titolo-sintesi">
       <h2 id="titolo-sintesi">In sintesi</h2>
       <p class="sotto">
         Sei domande per farsi un'idea, ognuna sulla sua scala fissa: le
@@ -72,7 +133,7 @@
       <p id="nota-sintesi" class="nota"></p>
     </section>
 
-    <section class="sezione filtri">
+    <section class="sezione filtri solo-completa">
       <h2>Quali domande vuoi nella tabella?</h2>
       <p class="sotto">Le principali sono già scelte. Apri un gruppo per aggiungerne altre.</p>
       <div class="opzioni">
@@ -80,8 +141,7 @@
              the application finds at least two definitions in the database; the
              options are read from the data and generated dynamically. -->
         <div id="riquadro-definizione" class="riquadro-definizione nascosto">
-          <label for="sel-definizione">Definizione di &laquo;occupato&raquo;</label>
-          <select id="sel-definizione"></select>
+          <select id="sel-definizione" aria-label="Definizione di «occupato»"></select>
         </div>
         <button id="btn-principali" class="link" type="button">Solo le principali</button>
         <button id="btn-tutte" class="link" type="button">Tutte</button>
@@ -91,11 +151,11 @@
       <div id="accordion-filtri" class="accordion"></div>
     </section>
 
-    <div id="azione-confronta" class="azione">
+    <div id="azione-confronta" class="azione solo-completa">
       <button id="btn-confronta" class="btn-pri btn-grande" type="button">Confronta</button>
     </div>
 
-    <section id="risultato" class="sezione nascosto" aria-labelledby="titolo-tabella">
+    <section id="risultato" class="sezione nascosto solo-completa" aria-labelledby="titolo-tabella">
       <h2 id="titolo-tabella">Tabella completa</h2>
       <p class="sotto">Ogni domanda scelta sopra, colonna per colonna.</p>
       <div class="scroll-tabella">
@@ -133,11 +193,11 @@
             <input id="cerca-corso-testo" type="search" autocomplete="off"
               placeholder="es. informatica, infermieristica, economia pisa" />
           </label>
-          <label>Ateneo
-            <select id="cerca-corso-ateneo">
+          <div class="cerca-corso-ateneo">
+            <select id="cerca-corso-ateneo" aria-label="Ateneo">
               <option value="">Tutti gli atenei</option>
             </select>
-          </label>
+          </div>
         </div>
         <p id="cerca-corso-conteggio" class="cerca-corso-conteggio" aria-live="polite"></p>
         <ul id="cerca-corso-risultati" class="cerca-corso-risultati"></ul>
@@ -166,42 +226,56 @@
 <!-- AI layer, in a dialog opened from the header. Every control keeps the id
      app.js reads; the dialog only changes where they live. -->
 <dialog id="dlg-ai" class="dlg-ai" aria-labelledby="ai-titolo">
-  <div class="dlg-testa">
-    <h3 id="ai-titolo">Chiedi all'AI</h3>
-    <button id="chiudi-ai" class="togli" type="button" aria-label="Chiudi">×</button>
-  </div>
+  <button id="chiudi-ai" class="togli dlg-chiudi" type="button" aria-label="Chiudi">×</button>
   <div class="dlg-corpo">
-    <p>
-      Scrivi cosa vuoi confrontare: un'AI a tua scelta, anche locale sul tuo
-      computer, imposta colonne e domande per te. I numeri restano quelli
-      ufficiali AlmaLaurea: l'AI sceglie <em>cosa</em> mostrare, mai
-      <em>quanto</em> vale.
-    </p>
+    <div class="ai-vuoto">
+      <div class="ai-scintilla" aria-hidden="true">✦</div>
+      <h3 id="ai-titolo">Chiedi all'AI</h3>
+      <p>
+        Scrivi cosa vuoi confrontare: un'AI a tua scelta, anche locale sul tuo
+        computer, imposta colonne e domande per te.
+      </p>
+    </div>
+
+    <div class="ai-suggerimenti">
+      <p class="ai-suggerimenti-titolo">Prova con</p>
+      <div>
+        <button class="ai-suggerimento" type="button">Confronta l'occupazione di Bologna, Padova e Roma Sapienza</button>
+        <button class="ai-suggerimento" type="button">Quale area disciplinare guadagna di più dopo la laurea?</button>
+      </div>
+    </div>
 
     <div class="ai-richiesta">
-      <textarea id="ai-frase" rows="3"
+      <textarea id="ai-frase" rows="2" aria-label="Cosa vuoi confrontare"
         placeholder="Es. Confronta le prospettive di lavoro tra ingegneria informatica ed economia"></textarea>
+      <button id="ai-invia" class="ai-invia" type="button" aria-label="Chiedi">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 20 4l-4 16-4-7-8-1Z"/><path d="m12 13 8-9"/></svg>
+      </button>
     </div>
+    <p class="ai-garanzia">
+      I numeri restano quelli ufficiali AlmaLaurea: l'AI sceglie <em>cosa</em>
+      mostrare, mai <em>quanto</em> vale.
+    </p>
     <p id="ai-stato" class="ai-stato" aria-live="polite"></p>
 
     <details class="ai-connessione">
       <summary>Collega la tua AI, anche locale</summary>
       <div class="ai-config">
-        <label>Preset
-          <select id="ai-preset">
+        <div class="campo-ai">
+          <select id="ai-preset" aria-label="Preset">
             <option value="">—</option>
             <option value="ollama">Ollama (locale)</option>
             <option value="lmstudio">LM Studio (locale)</option>
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
           </select>
-        </label>
-        <label>Forma API
-          <select id="ai-forma">
+        </div>
+        <div class="campo-ai">
+          <select id="ai-forma" aria-label="Forma API">
             <option value="openai">OpenAI-compatibile</option>
             <option value="anthropic">Anthropic</option>
           </select>
-        </label>
+        </div>
         <label>URL di base
           <input id="ai-baseurl" type="text" placeholder="http://localhost:11434/v1" />
         </label>
@@ -267,7 +341,6 @@ Environment="OLLAMA_ORIGINS=<span class="ai-origine">questa pagina</span>"</code
 
     <div class="dlg-piede">
       <button id="annulla-ai" class="btn-sec" type="button">Chiudi</button>
-      <button id="ai-invia" class="btn-pri" type="button">Chiedi</button>
     </div>
   </div>
 </dialog>

@@ -30,6 +30,9 @@ import {
   formattaConUnita,
   etichetteScala,
 } from './indicatori-chiave.js';
+import { calcolaVoto, fraseVoto, SOGLIA_RISPONDENTI } from './voto.js';
+import { TERMINI_PARAGONE } from './termini-paragone.js';
+import { creaTendina, potenziaSelect } from './tendina.js';
 
 const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
 
@@ -44,8 +47,9 @@ const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
 // smallest sample in the published database has 61 respondents. The mechanism
 // is intended for course-level data, where respondents regularly number only a
 // few dozen, and keeping it as a single constant makes it adjustable in one
-// place.
-const SOGLIA_CAMPIONE_PICCOLO = 40;
+// place. The 0-10 score (js/voto.js) uses the same threshold, so a value
+// marked as a small sample here never gets a score there.
+const SOGLIA_CAMPIONE_PICCOLO = SOGLIA_RISPONDENTI;
 
 // --- In-memory UI state ---
 let db = null;
@@ -333,12 +337,21 @@ async function preparaColonnaCorso(stato) {
   if (colonne.includes(stato) && stato.ateneo === ateneo) renderTabella();
 }
 
+// Refresh functions of the drawn column fields, by column id: the fields
+// show the column state, which every redraw may have changed.
+const AGGIORNA_CAMPI_COLONNA = new Map();
+
 /**
  * Creates a comparison column.
  *
- * NOTE: the course selector (type "Corso", then university, then course) is a
- * minimal interface meant only to exercise course-level data until the
- * interface is redesigned.
+ * The three native selects (type, university or group, course) hold the
+ * column state and carry the change handlers; they stay in the page, hidden.
+ * The user sees two drawn fields instead (js/tendina.js): "Ateneo o area",
+ * which lists the universities and the discipline groups, and "Corso, se
+ * vuoi", which lists the university's courses after "Tutto l'ateneo". A pick
+ * in a drawn field sets the selects in the order a user would and dispatches
+ * their "change" events, so the handlers below are the only place where the
+ * state changes.
  *
  * A course column created here (from the course sheet) needs its university
  * too, since course codes are looked up inside that university's database;
@@ -365,6 +378,8 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
   // Filled by renderTabella(), which knows the column's current position.
   const postoSegno = document.createElement('span');
   postoSegno.className = 'posto-segno';
+  const numeroColonna = document.createElement('span');
+  numeroColonna.className = 'numero-colonna';
 
   const selectTipo = document.createElement('select');
   selectTipo.className = 'sel-tipo';
@@ -405,7 +420,6 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
       stato.codice = scelto;
       stato.ateneo = null;
     }
-    selectCorso.hidden = !perCorso;
   }
 
   function mostra() {
@@ -450,6 +464,7 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
   btnRimuovi.textContent = '×';
   btnRimuovi.addEventListener('click', () => {
     colonne = colonne.filter((c) => c.id !== id);
+    AGGIORNA_CAMPI_COLONNA.delete(id);
     contenitore.remove();
     renderTabella();
   });
@@ -458,9 +473,79 @@ function creaColonna(tipoIniziale, codiceIniziale, ateneoIniziale) {
   selectTipo.setAttribute('aria-label', 'Tipo di colonna');
   selectCodice.setAttribute('aria-label', 'Ateneo o gruppo');
   selectCorso.setAttribute('aria-label', 'Corso');
+  for (const s of [selectTipo, selectCodice, selectCorso]) {
+    s.hidden = true;
+    s.tabIndex = -1;
+  }
 
-  contenitore.append(postoSegno, selectTipo, selectCodice, selectCorso, btnRimuovi);
+  /**
+   * Sets one of the hidden selects as a user would, firing its handler.
+   *
+   * @param {HTMLSelectElement} select - Select to set.
+   * @param {string} valore - Value to choose.
+   */
+  function imposta(select, valore) {
+    select.value = valore;
+    select.dispatchEvent(new Event('change'));
+  }
+  const ateneoDellaColonna = () => (stato.tipo === 'corso' ? stato.ateneo : stato.codice);
+
+  const campoEntita = creaTendina({
+    etichetta: 'Ateneo o area',
+    classe: 'campo-entita',
+    cerca: true,
+    segnaposto: 'Cerca un ateneo o un\'area',
+    opzioni: () => [
+      ...codiciOrdinatiPerVisualizzazione('ateneo').map((c) =>
+        ({ valore: `ateneo:${c}`, testo: etichettaCodice('ateneo', c), sezione: 'Atenei' })),
+      ...codiciOrdinatiPerVisualizzazione('gruppo').map((c) =>
+        ({ valore: `gruppo:${c}`, testo: etichettaCodice('gruppo', c), sezione: 'Aree disciplinari, in tutta Italia' })),
+    ],
+    valore: () => (stato.tipo === 'gruppo' ? `gruppo:${stato.codice}` : `ateneo:${ateneoDellaColonna()}`),
+    testo: () => etichettaCodice(stato.tipo === 'gruppo' ? 'gruppo' : 'ateneo', ateneoDellaColonna()),
+    scegli: (valore) => {
+      const [tipo, codice] = valore.split(':');
+      // Picking a university shows the whole university: a course of the
+      // previous one would not belong to it.
+      if (stato.tipo !== tipo) imposta(selectTipo, tipo);
+      imposta(selectCodice, codice);
+    },
+  });
+
+  const campoCorso = creaTendina({
+    etichetta: 'Corso, se vuoi',
+    classe: 'campo-corso facoltativo',
+    cerca: true,
+    segnaposto: 'Cerca un corso',
+    opzioni: () => [
+      { valore: '', testo: 'Tutto l\'ateneo', nota: 'tutti i corsi e tutti i tipi di laurea' },
+      ...Object.entries(NOMI_CORSO[ateneoDellaColonna()] ?? {}).map(([c, nome]) =>
+        ({ valore: c, testo: nome })),
+    ],
+    valore: () => (stato.tipo === 'corso' ? stato.codice : ''),
+    testo: () => (stato.tipo === 'corso' ? etichettaColonna(stato) : 'Tutto l\'ateneo'),
+    scegli: (corso) => {
+      const ateneo = ateneoDellaColonna();
+      if (!corso) {
+        imposta(selectTipo, 'ateneo');
+        imposta(selectCodice, ateneo);
+        return;
+      }
+      if (stato.tipo !== 'corso') imposta(selectTipo, 'corso');
+      imposta(selectCorso, corso);
+    },
+  });
+
+  AGGIORNA_CAMPI_COLONNA.set(id, () => {
+    campoEntita.aggiorna();
+    campoCorso.aggiorna();
+    campoCorso.elemento.hidden = stato.tipo === 'gruppo';
+  });
+
+  const testa = el('div', { class: 'colonna-testa' }, postoSegno, numeroColonna, btnRimuovi);
+  contenitore.append(testa, campoEntita.elemento, campoCorso.elemento, selectTipo, selectCodice, selectCorso);
   elColonneSchede.appendChild(contenitore);
+  AGGIORNA_CAMPI_COLONNA.get(id)();
   if (stato.tipo === 'corso') preparaColonnaCorso(stato);
 }
 
@@ -656,6 +741,7 @@ function renderSelettoreDefinizione() {
     .join('');
   elSelDefinizione.value = definizioneScelta;
   elRiquadroDefinizione.classList.remove('nascosto');
+  potenziaSelect(elSelDefinizione, { etichetta: 'Definizione di «occupato»', classe: 'compatto' });
 
   elSelDefinizione.addEventListener('change', () => {
     definizioneScelta = elSelDefinizione.value;
@@ -1101,7 +1187,10 @@ function renderTabella() {
 
   // The selector boxes follow the column order, which removals change.
   colonne.forEach((c, i) => {
-    elColonneSchede.querySelector(`[data-id="${c.id}"] .posto-segno`)?.replaceChildren(creaSegno(i));
+    const box = elColonneSchede.querySelector(`[data-id="${c.id}"]`);
+    box?.querySelector('.posto-segno').replaceChildren(creaSegno(i));
+    if (box) box.querySelector('.numero-colonna').textContent = `Colonna ${i + 1}`;
+    AGGIORNA_CAMPI_COLONNA.get(c.id)?.();
   });
 
   if (colonne.length === 0) {
@@ -1111,6 +1200,7 @@ function renderTabella() {
     tr.appendChild(td);
     elTabellaBody.appendChild(tr);
     renderSintesi([]);
+    renderVoti([]);
     aggiornaAvvisi([]);
     return;
   }
@@ -1123,6 +1213,7 @@ function renderTabella() {
     ...interrogaScheda(colonna),
   }));
   renderSintesi(datiPerColonna);
+  renderVoti(datiPerColonna);
   aggiornaAvvisi(datiPerColonna);
 
   // Determine selected questions before rendering the header to identify which
@@ -1401,7 +1492,300 @@ function renderSintesi(datiPerColonna) {
   aggiornaNotaSintesi(piccoli.some((riga) => riga.some(Boolean)));
 }
 
-// --- 5c. Course sheet ("Scheda del corso") ---
+// --- 5c. The Base view: a 0-10 score per key question (js/voto.js) ---
+// Each column is ranked among sheets of its own kind: a university among the
+// universities, a group among the groups, a first-level course among the
+// first-level courses of the groups in the comparison (js/termini-paragone.js,
+// since the browser holds only the universities it has downloaded).
+
+const elGrigliaVoti = document.getElementById('griglia-voti');
+const elParagoneVoti = document.getElementById('paragone-voti');
+
+// For first-level graduates the employment rate is misleading: most of them
+// go on to a second-level degree and count as not working. Their work row is
+// "works or still studies", the sum of the three positive answers below,
+// computed exactly as tools/genera_termini_paragone.py computes the values it
+// is ranked against.
+const LAVORA_STUDIA = TERMINI_PARAGONE.lavoraStudia;
+const RIGA_LAVORO = 'occupati';
+
+/** How a score sentence names the sheets a column is ranked among. */
+const NOME_TERMINI = {
+  ateneo: { uno: 'ateneo', molti: 'atenei' },
+  gruppo: { uno: 'area', molti: 'aree' },
+  corso: { uno: 'corso', molti: 'corsi' },
+};
+
+// Values of the aggregate sheets, by kind, indicator and definition. They
+// only change with the definition, so they are read once per definition.
+const terminiAggregatiInMemoria = new Map();
+
+/**
+ * Returns the values of every university, or every group, for an indicator.
+ *
+ * Only sheets with at least SOGLIA_CAMPIONE_PICCOLO respondents count, as
+ * for courses; the national total (no university, no group) never does.
+ *
+ * @param {'ateneo'|'gruppo'} tipo - Kind of sheet.
+ * @param {object} ind - Indicator from indicatori-chiave.js.
+ * @returns {number[]} Values.
+ */
+function terminiAggregati(tipo, ind) {
+  const chiaveCache = `${tipo}${SEPARATORE_CHIAVE}${ind.id}${SEPARATORE_CHIAVE}${definizioneScelta}`;
+  if (terminiAggregatiInMemoria.has(chiaveCache)) return terminiAggregatiInMemoria.get(chiaveCache);
+  const condizione = tipo === 'ateneo' ? "ateneo != '' AND gruppo = ''" : "gruppo != '' AND ateneo = ''";
+  const stmt = db.prepare(
+    `SELECT valore FROM dati
+     WHERE ${condizione}
+       AND indagine = :indagine AND categoria = :categoria AND indicatore = :indicatore
+       AND definizione IN ('', 'condivisa', :definizione)
+       AND valore IS NOT NULL AND numero_compilatori >= :soglia`
+  );
+  const valori = [];
+  try {
+    stmt.bind({
+      ':indagine': ind.indagine, ':categoria': ind.categoria, ':indicatore': ind.indicatore,
+      ':definizione': definizioneScelta, ':soglia': SOGLIA_CAMPIONE_PICCOLO,
+    });
+    while (stmt.step()) valori.push(stmt.get()[0]);
+  } finally {
+    stmt.free();
+  }
+  terminiAggregatiInMemoria.set(chiaveCache, valori);
+  return valori;
+}
+
+/**
+ * Returns the values of the first-level courses of some groups.
+ *
+ * @param {string} id - Indicator id, or 'lavora-studia'.
+ * @param {string} indagine - Survey of the indicator.
+ * @param {string[]} gruppi - Group codes.
+ * @returns {number[]} Values.
+ */
+function terminiCorsi(id, indagine, gruppi) {
+  const perGruppo = indagine === 'profilo'
+    ? TERMINI_PARAGONE.valori.profilo[id]
+    : TERMINI_PARAGONE.valori.occupazione[definizioneScelta]?.[id];
+  return gruppi.flatMap((g) => perGruppo?.[g] ?? []);
+}
+
+/**
+ * Returns the "works or still studies" share of a course sheet.
+ *
+ * @param {Map} mappa - Sheet values.
+ * @returns {{valore:(number|null), info:(object|undefined)}} The sum, or null
+ *   when every answer is missing or a positive answer is hidden by the source;
+ *   info is a row to describe a missing value with.
+ */
+function lavoraOStudia(mappa) {
+  const righe = [];
+  for (const [k, info] of mappa) {
+    const [indagine, categoria, indicatore] = k.split(SEPARATORE_CHIAVE);
+    if (indagine === 'occupazione' && categoria === LAVORA_STUDIA.categoria) righe.push({ indicatore, info });
+  }
+  if (righe.length === 0) return { valore: null, info: undefined };
+  if (righe.every((r) => r.info.valore === null || r.info.valore === undefined)) {
+    return { valore: null, info: righe[0].info };
+  }
+  let somma = 0;
+  for (const { indicatore, info } of righe) {
+    if (!LAVORA_STUDIA.voci.includes(indicatore)) continue;
+    if (info.valore !== null && info.valore !== undefined) somma += info.valore;
+    else if (info.nota !== 'zero_casi') return { valore: null, info };
+  }
+  return { valore: Math.round(somma * 10) / 10, info: undefined };
+}
+
+// Discipline group of each course, read once from its university database.
+const gruppoDelCorso = new Map();
+
+/**
+ * Returns the discipline group of a course column, or null while its
+ * university is not loaded.
+ *
+ * @param {object} colonna - Course column.
+ * @returns {string|null} Group code.
+ */
+function gruppoColonnaCorso(colonna) {
+  const k = `${colonna.ateneo}/${colonna.codice}`;
+  if (!gruppoDelCorso.has(k)) {
+    const dbAteneo = ateneoCaricato(colonna.ateneo);
+    if (!dbAteneo) return null;
+    gruppoDelCorso.set(k, descriviCorso(dbAteneo, colonna.codice)?.gruppo ?? null);
+  }
+  return gruppoDelCorso.get(k);
+}
+
+/**
+ * Creates the ten marks under a score.
+ *
+ * @param {number} voto - Score from 0 to 10.
+ * @returns {HTMLElement} Marks, hidden from assistive technology.
+ */
+function creaTacche(voto) {
+  return el('span', { class: 'tacche', 'aria-hidden': 'true' },
+    ...Array.from({ length: 10 }, (_, i) => el('i', { class: i < voto ? 'piena' : null })));
+}
+
+/**
+ * Formats the spread of a flat set of values in plain words.
+ *
+ * @param {object} esito - 'tutti-uguali' result of calcolaVoto().
+ * @param {number} valore - Value of the column.
+ * @param {string} unita - Unit of the indicator.
+ * @returns {string} Sentence.
+ */
+function testoTuttiUguali(esito, valore, unita) {
+  if (unita === '%') {
+    return `qui sono ${Math.round(valore)} su 100, e quasi tutti stanno fra ` +
+      `${Math.round(esito.basso)} e ${Math.round(esito.alto)}`;
+  }
+  return `quasi tutti fra ${formattaConUnita(esito.basso, unita)} e ${formattaConUnita(esito.alto, unita)}`;
+}
+
+/**
+ * Creates the cell of one column for one key question.
+ *
+ * @param {object} ind - Indicator from indicatori-chiave.js.
+ * @param {object} dati - Column data, as renderTabella() reads it.
+ * @param {string[]} gruppiCorsi - Groups of the course columns in the comparison.
+ * @param {boolean} misto - Whether courses and aggregates are compared together.
+ * @returns {HTMLElement} Cell.
+ */
+function creaCellaVoto(ind, dati, gruppiCorsi, misto) {
+  const { colonna, indice, mappa, numerosita, inCaricamento } = dati;
+  const tipo = colonna.tipo;
+  const chi = el('span', { class: 'voto-chi' }, creaSegno(indice),
+    el('span', { class: 'nome-colonna' }, etichettaColonna(colonna)));
+  const cella = (classe, ...figli) =>
+    el('div', { class: `voto ${classe}`, 'data-colonna': colonna.id }, chi, ...figli);
+  // In a comparison that mixes courses and aggregates, a course's work row
+  // says which question it answers, whatever the outcome below.
+  const etichettaLavoro = misto && tipo === 'corso' && ind.id === RIGA_LAVORO
+    ? el('small', { class: 'voto-variante' }, 'per un corso: lavorano o studiano ancora')
+    : null;
+  const senzaVoto = (motivo, titolo, spiegazione) =>
+    cella('senza-voto', etichettaLavoro, el('div', { class: 'voto-motivo', 'data-motivo': motivo },
+      el('strong', {}, titolo), spiegazione));
+
+  if (tipo === 'corso' && colonna.errore) return senzaVoto('errore', 'Non disponibile', colonna.errore);
+  if (inCaricamento) return senzaVoto('caricamento', 'Caricamento…', 'scarico i corsi dell\'ateneo');
+
+  const lavoroDelCorso = tipo === 'corso' && ind.id === RIGA_LAVORO;
+  const idTermini = lavoroDelCorso ? 'lavora-studia' : ind.id;
+  let valore;
+  let info;
+  if (lavoroDelCorso) {
+    ({ valore, info } = lavoraOStudia(mappa));
+  } else {
+    info = mappa.get(chiave(ind.indagine, ind.categoria, ind.indicatore));
+    valore = info?.valore ?? null;
+  }
+  const campione = campioneDellaRiga(numerosita, ind.indagine);
+  const termini = tipo === 'corso'
+    ? terminiCorsi(idTermini, ind.indagine, gruppiCorsi)
+    : terminiAggregati(tipo, ind);
+  const esito = calcolaVoto({
+    valore, rispondenti: campione?.numero, termini, unita: ind.unita, meglioBasso: ind.meglioBasso,
+  });
+
+  if (esito.voto !== undefined) {
+    const nome = NOME_TERMINI[tipo];
+    return cella('con-voto',
+      etichettaLavoro,
+      el('span', {
+        class: 'voto-cifra',
+        'data-voto': String(esito.voto),
+        title: `${etichettaColonna(colonna)}: ${formattaConUnita(valore, ind.unita)}, ` +
+          `messo a confronto con ${formattaNumero(esito.termini)} ${nome.molti}`,
+      }, String(esito.voto), el('small', {}, '/10')),
+      creaTacche(esito.voto),
+      el('span', { class: 'voto-frase' }, fraseVoto(esito.voto, nome))
+    );
+  }
+  switch (esito.motivo) {
+    case 'pochi-dati':
+      return senzaVoto('pochi-dati', 'Pochi dati',
+        `solo ${formattaNumero(esito.rispondenti)} ${campione?.nome ?? 'rispondenti'}: non basta per un voto`);
+    case 'pochi-termini':
+      return senzaVoto('pochi-termini', 'Niente voto', 'troppo pochi termini di paragone');
+    case 'tutti-uguali':
+      return senzaVoto('tutti-uguali', 'Quasi tutti uguali', testoTuttiUguali(esito, valore, ind.unita));
+    default:
+      return senzaVoto('assente', 'Dato non pubblicato',
+        info ? `AlmaLaurea: ${processData(info)}` : 'AlmaLaurea non lo pubblica');
+  }
+}
+
+/**
+ * Writes which sheets the scores were ranked against.
+ *
+ * @param {object[]} datiPerColonna - Data of each comparison column.
+ * @param {string[]} gruppiCorsi - Groups of the course columns in the comparison.
+ */
+function aggiornaParagoneVoti(datiPerColonna, gruppiCorsi) {
+  const parti = [];
+  const tipi = new Set(datiPerColonna.map((d) => d.colonna.tipo));
+  const corsi = datiPerColonna.filter((d) => d.colonna.tipo === 'corso').length;
+  if (gruppiCorsi.length > 0) {
+    const nLavoro = terminiCorsi('retribuzione', 'occupazione', gruppiCorsi).length;
+    const nStudio = terminiCorsi('rifarebbero', 'profilo', gruppiCorsi).length;
+    parti.push(
+      `I corsi sono messi a confronto con i corsi triennali di ` +
+      `${gruppiCorsi.map((g) => etichettaCodice('gruppo', g)).join(' e di ')} con almeno ` +
+      `${SOGLIA_CAMPIONE_PICCOLO} risposte: ${formattaNumero(nLavoro)} sulle domande di lavoro, ` +
+      `${formattaNumero(nStudio)} su quelle di studio.` +
+      (corsi > 1 ? ' Lo stesso insieme per tutti i corsi, così i loro voti si possono confrontare.' : '')
+    );
+  }
+  if (tipi.has('ateneo')) parti.push(`Gli atenei con tutti i ${codiciAteneo.length} atenei.`);
+  if (tipi.has('gruppo')) parti.push(`Le aree con tutte le ${codiciGruppo.length} aree disciplinari, in tutta Italia.`);
+  if (definizioniDisponibili.length >= 2) parti.push(`Lavoro con la definizione ${definizioneScelta} di «occupato».`);
+  elParagoneVoti.textContent = parti.join(' ');
+}
+
+/**
+ * Renders the Base view's scores for the current columns.
+ *
+ * @param {object[]} datiPerColonna - Data of each comparison column, as renderTabella() reads it.
+ */
+function renderVoti(datiPerColonna) {
+  if (datiPerColonna.length === 0) {
+    elParagoneVoti.textContent = '';
+    elGrigliaVoti.replaceChildren(
+      el('p', { class: 'sintesi-vuota' }, 'Aggiungi almeno una colonna per vedere i voti.'));
+    return;
+  }
+  const gruppiCorsi = [...new Set(datiPerColonna
+    .filter((d) => d.colonna.tipo === 'corso')
+    .map((d) => gruppoColonnaCorso(d.colonna))
+    .filter(Boolean))].sort((a, b) => Number(a) - Number(b));
+  const tipi = new Set(datiPerColonna.map((d) => d.colonna.tipo));
+  const soloCorsi = tipi.size === 1 && tipi.has('corso');
+  const misto = tipi.has('corso') && tipi.size > 1;
+
+  elGrigliaVoti.style.setProperty('--n-colonne', String(datiPerColonna.length));
+  const testa = el('div', { class: 'voti-riga voti-testa', 'aria-hidden': 'true' },
+    el('span', {}),
+    ...datiPerColonna.map(({ colonna, indice }) =>
+      el('span', { title: etichettaColonna(colonna) }, creaSegno(indice),
+        el('span', { class: 'nome-colonna' }, etichettaColonna(colonna)))));
+  const righe = INDICATORI_CRUSCOTTO.map((ind) => {
+    const lavoroCorsi = soloCorsi && ind.id === RIGA_LAVORO;
+    return el('div', { class: 'voti-riga', 'data-indicatore': ind.id },
+      el('div', { class: 'voti-domanda' },
+        el('strong', {}, lavoroCorsi ? 'Quanti lavorano o studiano ancora' : ind.titolo),
+        el('small', {}, lavoroCorsi
+          ? `${LAVORA_STUDIA.categoria} › lavorano o sono iscritti a una laurea di secondo livello`
+          : etichettaUfficiale(ind))),
+      ...datiPerColonna.map((dati) => creaCellaVoto(ind, dati, gruppiCorsi, misto)));
+  });
+  elGrigliaVoti.replaceChildren(testa, ...righe);
+  aggiornaParagoneVoti(datiPerColonna, gruppiCorsi);
+}
+
+// --- 5d. Course sheet ("Scheda del corso") ---
 // One course next to its university and its discipline group, on the key
 // indicators. The three sheets are the official ones: nothing is averaged or
 // recomputed to build the comparison.
@@ -1510,10 +1894,9 @@ function creaRiquadroCampione(numerosita) {
       elSelDefinizione.value = sel.value;
       elSelDefinizione.dispatchEvent(new Event('change'));
     });
-    riquadro.append(
-      el('label', { class: 'riga-definizione-scheda' }, 'Definizione di «occupato»', sel),
-      el('p', { class: 'nota-riquadro' }, TESTO_DEFINIZIONE[definizioneScelta] ?? '')
-    );
+    const riga = el('div', { class: 'riga-definizione-scheda' }, sel);
+    potenziaSelect(sel, { etichetta: 'Definizione di «occupato»' });
+    riquadro.append(riga, el('p', { class: 'nota-riquadro' }, TESTO_DEFINIZIONE[definizioneScelta] ?? ''));
   }
   return riquadro;
 }
@@ -1745,6 +2128,7 @@ function preparaRicercaCorsi() {
   for (const codice of codiciOrdinatiPerVisualizzazione('ateneo')) {
     elCercaAteneo.append(new Option(etichettaCodice('ateneo', codice), codice));
   }
+  potenziaSelect(elCercaAteneo, { etichetta: 'Ateneo', cerca: true, segnaposto: 'Cerca un ateneo' });
   elCercaTesto.addEventListener('input', aggiornaRicercaCorsi);
   elCercaAteneo.addEventListener('change', aggiornaRicercaCorsi);
   aggiornaRicercaCorsi();
@@ -1806,6 +2190,50 @@ function applicaRotta() {
   }
   aggiornaRicercaCorsi();
 }
+
+// --- Base or Completa, light or dark ---
+
+const elModo = document.getElementById('modo');
+const elTema = document.getElementById('tema');
+
+/**
+ * Switches between the Base view (scores) and the Completa view (published
+ * values, question filters, full table). Both are always up to date: the
+ * switch only shows one or the other (style.css, data-modo).
+ *
+ * @param {boolean} completa - Show the Completa view.
+ */
+function impostaModo(completa) {
+  document.documentElement.dataset.modo = completa ? 'completa' : 'base';
+  elModo.setAttribute('aria-checked', String(completa));
+  document.getElementById('etichetta-base').dataset.attiva = String(!completa);
+  document.getElementById('etichetta-completa').dataset.attiva = String(completa);
+}
+elModo.addEventListener('click', () => impostaModo(elModo.getAttribute('aria-checked') !== 'true'));
+document.getElementById('etichetta-base').addEventListener('click', () => impostaModo(false));
+document.getElementById('etichetta-completa').addEventListener('click', () => impostaModo(true));
+
+// The theme follows the system until the user picks one with the header
+// button; the pick is remembered (the inline script in index.html applies it
+// before the first paint).
+const CHIAVE_TEMA = 'almalaurea-tema';
+const scuroDiSistema = matchMedia('(prefers-color-scheme: dark)');
+const temaAttivo = () => document.documentElement.dataset.tema || (scuroDiSistema.matches ? 'scuro' : 'chiaro');
+
+/** Writes the theme in use where the stylesheet and the button read it. */
+function mostraTema() {
+  const attivo = temaAttivo();
+  document.documentElement.dataset.temaAttivo = attivo;
+  elTema.setAttribute('aria-label', attivo === 'scuro' ? 'Passa al tema chiaro' : 'Passa al tema scuro');
+}
+elTema.addEventListener('click', () => {
+  const nuovo = temaAttivo() === 'scuro' ? 'chiaro' : 'scuro';
+  document.documentElement.dataset.tema = nuovo;
+  try { localStorage.setItem(CHIAVE_TEMA, nuovo); } catch { /* Storage is optional. */ }
+  mostraTema();
+});
+scuroDiSistema.addEventListener('change', mostraTema);
+mostraTema();
 
 // --- 6. Startup ---
 
@@ -2046,6 +2474,17 @@ if (elAiInvia) {
     elDlgAi.showModal();
     elAiFrase.focus();
   });
+  // A suggestion fills the request instead of sending it: the user still
+  // chooses the AI and can edit the sentence first.
+  for (const pulsante of document.querySelectorAll('.ai-suggerimento')) {
+    pulsante.addEventListener('click', () => {
+      elAiFrase.value = pulsante.textContent;
+      elAiFrase.focus();
+    });
+  }
+  elDlgAi.addEventListener('click', (evento) => {
+    if (evento.target === elDlgAi) elDlgAi.close();
+  });
   for (const id of ['chiudi-ai', 'annulla-ai']) {
     document.getElementById(id).addEventListener('click', () => elDlgAi.close());
   }
@@ -2071,6 +2510,11 @@ if (elAiInvia) {
     mostraStatoAi('Configurazione AI dimenticata da questo browser.', 'ok');
   });
   caricaConfigAi();
+  // Drawn after the saved configuration is restored, so they open on it.
+  const tendinePreset = potenziaSelect(elAiPreset, { etichetta: 'Preset' });
+  const tendinaForma = potenziaSelect(elAiForma, { etichetta: 'Forma API' });
+  // A preset sets the API shape without a "change" event on its select.
+  elAiPreset.addEventListener('change', () => { tendinePreset.aggiorna(); tendinaForma.aggiorna(); });
 }
 
 avvia();

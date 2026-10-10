@@ -188,6 +188,110 @@ async function main() {
        !document.getElementById('area-app').classList.contains('nascosto')`,
       'app visibile (database caricato)');
 
+    // --- 0a. La vista Base: un voto da 0 a 10 per domanda (js/voto.js) ---
+    // All'avvio le colonne sono Marche Politecnica (70001) e Bari (70002),
+    // messe a confronto con i 78 atenei. Voti attesi calcolati a parte sul
+    // database (definizione ampia), con le stesse regole: rango medio fra gli
+    // atenei con almeno 40 rispondenti.
+    const votiDi = (griglia) => `(() => {
+      const voti = (id) => [...document.querySelectorAll('${griglia} .voti-riga[data-indicatore="' + id + '"] .voto')]
+        .map(v => v.querySelector('[data-voto]')?.dataset.voto ?? v.querySelector('[data-motivo]')?.dataset.motivo);
+      return Object.fromEntries(['occupati', 'retribuzione', 'primo-lavoro', 'efficacia', 'in-corso', 'rifarebbero']
+        .map(id => [id, voti(id)]));
+    })()`;
+    const visibile = (selettore) =>
+      `(() => { const e = document.querySelector(${JSON.stringify(selettore)}); return !!e && e.offsetParent !== null; })()`;
+    const base = await valuta(`({
+      modo: document.documentElement.dataset.modo,
+      voti: ${votiDi('#griglia-voti')},
+      votiVisibili: ${visibile('#griglia-voti')},
+      sintesiVisibile: ${visibile('#griglia-sintesi')},
+      filtriVisibili: ${visibile('#accordion-filtri')},
+      paragone: document.getElementById('paragone-voti').textContent,
+      frase: document.querySelector('#griglia-voti .voti-riga[data-indicatore="retribuzione"] .voto-frase')?.textContent,
+      ultimi: document.querySelectorAll('#griglia-voti .voti-riga[data-indicatore="rifarebbero"] .voto-frase')[1]?.textContent,
+    })`);
+    verifica('si parte dalla vista Base: voti visibili, sintesi e filtri no',
+      base.modo === 'base' && base.votiVisibili && !base.sintesiVisibile && !base.filtriVisibili,
+      JSON.stringify({ ...base, voti: undefined }));
+    verifica('voti di Marche Politecnica e Bari fra i 78 atenei',
+      JSON.stringify(base.voti) === JSON.stringify({
+        occupati: ['6', '4'], retribuzione: ['8', '3'], 'primo-lavoro': ['9', '4'],
+        efficacia: ['8', '8'], 'in-corso': ['3', '2'], rifarebbero: ['5', '0'],
+      }), JSON.stringify(base.voti));
+    verifica('il voto e\' la sua frase: «meglio di 8 atenei su 10», e lo 0 «tra gli ultimi atenei»',
+      base.frase === 'meglio di 8 atenei su 10' && base.ultimi === 'tra gli ultimi atenei',
+      `${base.frase} | ${base.ultimi}`);
+    verifica('sotto i voti c\'e\' contro chi sono calcolati, e con quale definizione',
+      base.paragone.includes('tutti i 78 atenei') && base.paragone.includes('definizione ampia'), base.paragone);
+
+    // --- 0b. Le tendine disegnate (js/tendina.js) ---
+    // I tre select di ogni colonna restano nella pagina, nascosti, e tengono
+    // lo stato; l'utente vede due campi. Si sceglie come farebbe un utente:
+    // si apre il campo, si scrive nella ricerca, Invio.
+    const campi = await valuta(`[...document.querySelectorAll('.colonna-scheda')]
+      .map(c => [...c.querySelectorAll('.tendina-valore')].map(v => v.textContent))`);
+    verifica('ogni colonna mostra il suo ateneo e «Tutto l\'ateneo»',
+      JSON.stringify(campi) === JSON.stringify([['Marche Politecnica', "Tutto l'ateneo"], ['Bari', "Tutto l'ateneo"]]),
+      JSON.stringify(campi));
+    const scegliDaUtente = (colonna, campo, testo) => valuta(`(async () => {
+      const col = document.querySelectorAll('.colonna-scheda')[${colonna}];
+      col.querySelector('.${campo} .tendina-bottone').click();
+      const input = col.querySelector('.tendina-cerca input');
+      const fuoco = document.activeElement === input;
+      input.value = ${JSON.stringify(testo)};
+      input.dispatchEvent(new Event('input'));
+      const righe = [...col.querySelectorAll('.tendina-lista li[role=option]')].map(li => li.textContent);
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await new Promise(r => setTimeout(r, 50));
+      return { fuoco, righe, aperta: !!col.querySelector('.tendina'),
+               tipo: col.querySelector('.sel-tipo').value, codice: col.querySelector('.sel-codice').value,
+               corsoNascosto: col.querySelector('.campo-corso').hidden,
+               mostrato: col.querySelector('.campo-entita .tendina-valore').textContent };
+    })()`);
+    const area = await scegliDaUtente(1, 'campo-entita', 'informatica e tec');
+    verifica('cercando «informatica e tec» resta solo l\'area Informatica e Tecnologie ICT, col fuoco nella ricerca',
+      area.fuoco && area.righe.length === 1 && area.righe[0].startsWith('Informatica e Tecnologie ICT'),
+      JSON.stringify(area.righe));
+    verifica('Invio la sceglie: la colonna diventa un\'area e il campo del corso sparisce',
+      !area.aperta && area.tipo === 'gruppo' && area.codice === '10' && area.corsoNascosto &&
+      area.mostrato === 'Informatica e Tecnologie ICT', JSON.stringify(area));
+    const votiArea = await valuta(votiDi('#griglia-voti'));
+    verifica('l\'area ICT si confronta con le 15 aree: occupati 8, «rifarebbero» quasi tutti uguali',
+      votiArea.occupati[1] === '8' && votiArea['primo-lavoro'][1] === '9' &&
+      votiArea.rifarebbero[1] === 'tutti-uguali', JSON.stringify(votiArea));
+    const bari = await scegliDaUtente(1, 'campo-entita', 'bari');
+    verifica('e si torna a Bari dalla stessa tendina',
+      bari.righe[0] === 'Bari' && bari.tipo === 'ateneo' && bari.codice === '70002' && !bari.corsoNascosto,
+      JSON.stringify(bari));
+
+    // --- 0c. Il pulsante del tema: inverte quello in uso e lo ricorda ---
+    const tema = await valuta(`(() => {
+      const fondo = () => getComputedStyle(document.body).backgroundColor;
+      const prima = { attivo: document.documentElement.dataset.temaAttivo, fondo: fondo() };
+      document.getElementById('tema').click();
+      const dopo = { attivo: document.documentElement.dataset.temaAttivo, fondo: fondo(),
+                     ricordato: localStorage.getItem('almalaurea-tema') };
+      document.getElementById('tema').click();
+      return { prima, dopo, ritorno: document.documentElement.dataset.temaAttivo };
+    })()`);
+    verifica('il pulsante del tema passa allo scuro, lo ricorda, e torna al chiaro',
+      tema.prima.attivo === 'chiaro' && tema.dopo.attivo === 'scuro' && tema.dopo.ricordato === 'scuro' &&
+      tema.prima.fondo !== tema.dopo.fondo && tema.ritorno === 'chiaro', JSON.stringify(tema));
+
+    // --- 0d. Completa: da qui in poi le prove leggono i valori pubblicati ---
+    const completa = await valuta(`(() => {
+      document.getElementById('modo').click();
+      return { modo: document.documentElement.dataset.modo,
+               interruttore: document.getElementById('modo').getAttribute('aria-checked'),
+               votiVisibili: ${visibile('#griglia-voti')},
+               sintesiVisibile: ${visibile('#griglia-sintesi')},
+               filtriVisibili: ${visibile('#accordion-filtri')} };
+    })()`);
+    verifica('l\'interruttore passa a Completa: sintesi e filtri al posto dei voti',
+      completa.modo === 'completa' && completa.interruttore === 'true' && !completa.votiVisibili &&
+      completa.sintesiVisibile && completa.filtriVisibili, JSON.stringify(completa));
+
     // --- 0. All'apertura: le principali scelte, la tabella chiusa ---
     // Le domande principali sono quelle degli indicatori chiave (8, da
     // indicatori-chiave.js); la tabella completa compare solo dopo il primo
@@ -513,6 +617,25 @@ async function main() {
     const pagina = await valuta(`[document.documentElement.scrollWidth, innerWidth]`);
     verifica('su un telefono da 390 px la pagina non si allarga',
       pagina[0] <= 390 && pagina[1] <= 390, `pagina ${pagina[0]} px, finestra ${pagina[1]}`);
+    // Lo stesso in Base, con la tendina del corso aperta (nomi fino a 187
+    // caratteri), e la navigazione diventa una pillola in fondo allo schermo.
+    const telefonoBase = await valuta(`(() => {
+      document.getElementById('etichetta-base').click();
+      document.querySelector('.colonna-scheda .campo-corso .tendina-bottone').click();
+      const pannello = document.querySelector('.tendina').getBoundingClientRect();
+      const nav = document.querySelector('.navigazione');
+      const r = nav.getBoundingClientRect();
+      const esito = { pagina: document.documentElement.scrollWidth, tendina: [Math.round(pannello.left), Math.round(pannello.right)],
+                      navFissa: getComputedStyle(nav).position === 'fixed', navBasso: Math.round(innerHeight - r.bottom),
+                      navDentro: r.left >= 0 && r.right <= innerWidth };
+      document.querySelector('.tendina-cerca input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.getElementById('etichetta-completa').click();
+      return esito;
+    })()`);
+    verifica('su un telefono, in Base con la tendina aperta, niente si allarga e la navigazione sta in fondo',
+      telefonoBase.pagina <= 390 && telefonoBase.tendina[0] >= 0 && telefonoBase.tendina[1] <= 390 &&
+      telefonoBase.navFissa && telefonoBase.navBasso >= 8 && telefonoBase.navBasso <= 40 && telefonoBase.navDentro,
+      JSON.stringify(telefonoBase));
     await invia('Emulation.clearDeviceMetricsOverride');
     await attendi(300);
 
@@ -793,6 +916,22 @@ async function main() {
       tuttoConfronto.th[1].includes('Roma Sapienza') &&
       tuttoConfronto.th[2].includes('Informatica e Tecnologie ICT'),
       JSON.stringify(tuttoConfronto.th).slice(0, 200));
+    // I voti dello stesso confronto: ACSAI fra i 38 triennali di Informatica
+    // (sul lavoro 22 intervistati: pochi dati), Sapienza fra gli atenei,
+    // l'area fra le aree.
+    const votiMisti = await valuta(`({ voti: ${votiDi('#griglia-voti')},
+      variante: document.querySelector('#griglia-voti .voti-riga[data-indicatore="occupati"] .voto-variante')?.textContent,
+      paragone: document.getElementById('paragone-voti').textContent })`);
+    verifica('voti di ACSAI, Sapienza e area ICT, ognuno fra i suoi simili',
+      JSON.stringify(votiMisti.voti) === JSON.stringify({
+        occupati: ['pochi-dati', '6', '8'], retribuzione: ['pochi-dati', '6', '8'],
+        'primo-lavoro': ['pochi-dati', '5', '9'], efficacia: ['pochi-dati', '6', '8'],
+        'in-corso': ['10', '3', '2'], rifarebbero: ['1', '5', 'tutti-uguali'],
+      }), JSON.stringify(votiMisti.voti));
+    verifica('per il corso la riga del lavoro dice «lavorano o studiano», e i termini sono i 38 triennali ICT',
+      votiMisti.variante === 'per un corso: lavorano o studiano ancora' &&
+      votiMisti.paragone.includes('Informatica e Tecnologie ICT') && votiMisti.paragone.includes('38 su quelle di studio'),
+      `${votiMisti.variante} | ${votiMisti.paragone}`);
     verifica('la colonna corso rimanda alla sua scheda',
       tuttoConfronto.linkScheda === '#scheda/70026/0580106203100003', String(tuttoConfronto.linkScheda));
     verifica('la sintesi segue le nuove colonne: ACSAI 50,0%, Sapienza 63,9%, area 71,9%',

@@ -24,6 +24,7 @@
  * @property {string} categoria - AlmaLaurea category label, verbatim.
  * @property {string} indicatore - AlmaLaurea indicator label, verbatim.
  * @property {string} unita - '%', 'euro', 'mesi' or 'voto'.
+ * @property {boolean} [meglioBasso] - Whether a lower value is better, for the 0-10 score (js/voto.js).
  */
 
 /** @type {IndicatoreChiave[]} Shown both in the summary cards and in the course sheet. */
@@ -54,6 +55,7 @@ export const INDICATORI_CRUSCOTTO = [
     categoria: 'Occupati: tempi di ingresso nel mercato del lavoro (medie, in mesi)',
     indicatore: 'Tempo dalla laurea al reperimento del primo lavoro',
     unita: 'mesi',
+    meglioBasso: true,
   },
   {
     id: 'efficacia',

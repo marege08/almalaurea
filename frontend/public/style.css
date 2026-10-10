@@ -1,77 +1,79 @@
 /* style.css
  *
- * Visual identity: a muted green palette (e9f5db cfe1b9 b5c99a 97a97c 87986a
- * 718355) with a moss ink, one typeface (Public Sans, designed for public data
- * sites) with tabular figures, flat sections separated by rules instead of
- * cards. Warnings are tinted green, never red: they qualify a number, they do
- * not report a failure. The dark theme follows the system setting.
+ * Visual identity: petrol and amber. A neutral, almost white background, an
+ * almost black ink, and one decisive colour, petrol (#0e6e6b), for actions
+ * and selections, with amber (#c8741f) as the second column tone and the
+ * search highlight. Contrast is chosen for reading numbers: ink on background
+ * about 15.6:1, white on petrol 6.1:1. One typeface (Public Sans, designed for
+ * public data sites) with tabular figures, flat sections separated by rules
+ * instead of cards. Warnings are tinted, never red: they qualify a number,
+ * they do not report a failure.
+ *
+ * The dark theme follows the system until the header button picks one: the
+ * dark values apply under prefers-color-scheme: dark unless data-tema is
+ * "chiaro", and always when data-tema is "scuro".
  *
  * Columns of a comparison are told apart by SHAPE first (circle, diamond,
- * square, ...) and by tone second: several greens alone would not be enough.
- * A hollow shape means a value based on fewer respondents than the threshold.
+ * square, ...) and by tone second. A hollow shape means a value based on
+ * fewer respondents than the threshold.
  */
 
 :root {
-  --p1: #e9f5db;
-  --p2: #cfe1b9;
-  --p3: #b5c99a;
-  --p4: #97a97c;
-  --p5: #87986a;
-  --p6: #718355;
-
-  --bg: #f6f8f1;
+  --bg: #f5f7f7;
   --superficie: #ffffff;
-  --inchiostro: #26301c;
-  --tenue: #5a6450;
-  /* The palette's darkest green is not legible enough as text on a light
-     background; this is the same hue, darkened. */
-  --verde-testo: #4a5736;
-  --accento: var(--p6);
-  /* Text on the accent: white on the dark light-theme green, ink on the
-     lighter dark-theme green, where white would not be legible. */
+  --inchiostro: #10201f;
+  --tenue: #4b5c5a;
+  /* Accent as text: a darker petrol, legible on the light tints too. */
+  --verde-testo: #0b5552;
+  --accento: #0e6e6b;
+  /* Text on the accent: white on the light theme's petrol, ink on the
+     lighter dark-theme petrol, where white would not be legible. */
   --su-accento: #ffffff;
-  --tinta: var(--p1);
-  --linea: #dde4d0;
-  --linea-forte: var(--p3);
-  --binario: #d3dcc4;
+  --tinta: #e3f1ef;
+  --alone: #bfe3df;
+  --linea: #dbe4e3;
+  --linea-forte: #bccdca;
+  --tratto: #7f9593;
+  --tratteggio: #8fa5a2;
+  --bordo-avviso: #0e6e6b;
+  --binario: #cfdbd9;
+  --ambra: #c8741f;
+  --ombra: rgba(16, 32, 31, 0.1);
   --errore: #7a3b1d;
   --errore-bg: #f6e9df;
 
   /* One tone per column position; the shape carries the main distinction. */
-  --c1: #33401f;
-  --c2: #7f9162;
-  --c3: #26301c;
-  --c4: #5d7040;
-  --c5: #9aab7c;
-  --c6: #4a5736;
+  --c1: #0e6e6b;
+  --c2: #c8741f;
+  --c3: #10201f;
+  --c4: #4f8f8a;
+  --c5: #a8662a;
+  --c6: #4b5c5a;
 
   --sans: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161a12;
-    --superficie: #1d2218;
-    --inchiostro: #e4ead9;
-    --tenue: #a1ab92;
-    --verde-testo: #cfe1b9;
-    --accento: #97a97c;
-    --su-accento: #161a12;
-    --tinta: #243020;
-    --linea: #2e3727;
-    --linea-forte: #4a5a3c;
-    --binario: #3a4632;
-    --errore: #f0b89a;
-    --errore-bg: #3a2418;
-    --c1: #cfe1b9;
-    --c2: #97a97c;
-    --c3: #e9f5db;
-    --c4: #b5c99a;
-    --c5: #718355;
-    --c6: #87986a;
+  :root:not([data-tema="chiaro"]) {
+    --bg: #0f1615; --superficie: #152020; --inchiostro: #e4eeec; --tenue: #9fb2af;
+    --verde-testo: #8ad8d3; --accento: #4fc2bc; --su-accento: #071413; --tinta: #16302e;
+    --alone: #1d4441; --linea: #22302f; --linea-forte: #344946; --tratto: #5f7774;
+    --tratteggio: #557270; --bordo-avviso: #4fc2bc; --binario: #2e403e; --ambra: #eba25a;
+    --ombra: rgba(0, 0, 0, 0.35); --errore: #f0b89a; --errore-bg: #3a2418;
+    --c1: #4fc2bc; --c2: #eba25a; --c3: #e4eeec; --c4: #8fc9c3; --c5: #f0c08a; --c6: #9fb2af;
     color-scheme: dark;
   }
+}
+
+:root[data-tema="scuro"] {
+  --bg: #0f1615; --superficie: #152020; --inchiostro: #e4eeec; --tenue: #9fb2af;
+  --verde-testo: #8ad8d3; --accento: #4fc2bc; --su-accento: #071413; --tinta: #16302e;
+  --alone: #1d4441; --linea: #22302f; --linea-forte: #344946; --tratto: #5f7774;
+  --tratteggio: #557270; --bordo-avviso: #4fc2bc; --binario: #2e403e; --ambra: #eba25a;
+  --ombra: rgba(0, 0, 0, 0.35); --errore: #f0b89a; --errore-bg: #3a2418;
+  --c1: #4fc2bc; --c2: #eba25a; --c3: #e4eeec; --c4: #8fc9c3; --c5: #f0c08a; --c6: #9fb2af;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -102,69 +104,141 @@ a { color: var(--verde-testo); }
 
 .nascosto { display: none !important; }
 
-/* --- Header --- */
+/* --- Header: a bar floating above the page --- */
 
+/* The sticky band is transparent but fades the page out under the bar, so
+   text scrolling past never shows above it. It takes no clicks of its own. */
 .testata {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--bg);
-  border-bottom: 1px solid var(--linea);
+  padding: 0.75rem 1.25rem 0.35rem;
+  pointer-events: none;
+  background: linear-gradient(var(--bg) 0 55%, transparent);
 }
 
-.testata-riga {
+/* No backdrop-filter here: it would make the bar the containing block of
+   the navigation, which on a phone is position: fixed to the screen. */
+.testata-barra {
+  pointer-events: auto;
+  max-width: calc(1120px - 1rem);
+  margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding-block: 0.7rem 0.2rem;
+  gap: 1.1rem;
+  padding: 0.5rem 0.55rem 0.5rem 1.15rem;
+  border: 1px solid var(--linea);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--superficie) 94%, transparent);
+  box-shadow: 0 1px 2px var(--ombra), 0 10px 30px var(--ombra);
 }
 
 .marchio { flex: 1; min-width: 0; }
 
 .marchio h1 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.12rem;
   font-weight: 800;
   letter-spacing: -0.015em;
 }
 
 .marchio p { margin: 0; font-size: 0.82rem; color: var(--tenue); }
 
-.btn-ai {
+.navigazione {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  background: var(--superficie);
+}
+
+.voce-nav {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  flex: none;
-  border: 1px solid var(--accento);
-  background: var(--superficie);
-  color: var(--verde-testo);
+  gap: 0.4rem;
+  border: 0;
   border-radius: 999px;
-  padding: 0.4rem 0.95rem;
+  padding: 0.38rem 0.85rem;
+  background: none;
+  color: var(--tenue);
   font-weight: 600;
+  font-size: 0.86rem;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.voce-nav svg { width: 1.05rem; height: 1.05rem; flex: none; }
+.voce-nav:hover { color: var(--inchiostro); }
+.voce-nav[aria-current="page"] { background: var(--accento); color: var(--su-accento); }
+.voce-nav .testo-corto { display: none; }
+
+/* Base / Completa: a switch between two labels. */
+.modo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   font-size: 0.88rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+.modo-etichetta { color: var(--tenue); cursor: pointer; }
+.modo-etichetta[data-attiva="true"] { color: var(--inchiostro); }
+
+.interruttore {
+  position: relative;
+  flex: none;
+  width: 2.9rem;
+  height: 1.65rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--binario);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.interruttore::after {
+  content: '';
+  position: absolute;
+  top: 0.18rem;
+  left: 0.18rem;
+  width: 1.29rem;
+  height: 1.29rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 32, 31, 0.35);
+  transition: transform 0.2s;
+}
+
+.interruttore[aria-checked="true"] { background: var(--accento); }
+.interruttore[aria-checked="true"]::after { transform: translateX(1.25rem); }
+
+/* Light / dark: the sun or the moon of the theme in use. */
+.btn-tema {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--linea);
+  border-radius: 50%;
+  background: var(--superficie);
+  color: var(--inchiostro);
   cursor: pointer;
 }
 
-.btn-ai:hover { background: var(--tinta); }
+.btn-tema:hover { border-color: var(--tratto); }
+.btn-tema svg { width: 1.1rem; height: 1.1rem; }
+.btn-tema .luna { display: none; }
+:root[data-tema-attivo="scuro"] .btn-tema .sole { display: none; }
+:root[data-tema-attivo="scuro"] .btn-tema .luna { display: block; }
 
-.schede-vista { display: flex; gap: 1.4rem; }
-
-.scheda-vista {
-  padding: 0.55rem 0;
-  margin-bottom: -1px;
-  border-bottom: 2px solid transparent;
-  color: var(--tenue);
-  font-weight: 600;
-  font-size: 0.92rem;
-  text-decoration: none;
-}
-
-.scheda-vista:hover { color: var(--inchiostro); }
-
-.scheda-vista[aria-current="page"] {
-  color: var(--inchiostro);
-  border-bottom-color: var(--accento);
-}
+/* What each view shows (html data-modo, set by app.js). */
+:root[data-modo="base"] .solo-completa,
+:root[data-modo="completa"] .solo-base { display: none !important; }
 
 /* --- Page structure --- */
 
@@ -205,7 +279,7 @@ h2 {
 .banda-stato {
   background: var(--tinta);
   color: var(--verde-testo);
-  border-left: 4px solid var(--p5);
+  border-left: 4px solid var(--bordo-avviso);
   padding: 0.8rem 1rem;
   border-radius: 0 8px 8px 0;
   font-weight: 600;
@@ -317,57 +391,239 @@ textarea {
 /* --- Column selector --- */
 
 .colonne-riga {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 1.4rem 2rem;
+  align-items: start;
 }
 
-.colonne-schede {
-  display: contents;
-}
+.colonne-schede { display: contents; }
 
-/* Capped at the row width: the course menu's options run up to 187
-   characters, and without a cap the row would size itself on them and
-   widen the whole page on a phone. */
+/* One column: its marker, its number and the remove button, then the two
+   drawn fields. The single grid track is minmax(0, 1fr): an auto track would
+   size itself on a course name kept on one line (up to 187 characters) and
+   widen the page on a phone. */
 .colonna-scheda {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.colonna-testa {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--tenue);
+}
+
+.colonna-testa .togli { margin-left: auto; }
+
+/* The "add" field is drawn like a field, with dashed open-cornered lines. */
+.aggiungi {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 5.6rem;
+  margin-top: 1.55rem;
+  border: 0;
+  color: var(--verde-testo);
+  font-weight: 600;
+  cursor: pointer;
+  background:
+    repeating-linear-gradient(90deg, var(--tratteggio) 0 0.55rem, transparent 0.55rem 1rem) top center / calc(100% - 1.1rem) 1.5px no-repeat,
+    repeating-linear-gradient(90deg, var(--tratteggio) 0 0.55rem, transparent 0.55rem 1rem) bottom center / calc(100% - 1.1rem) 1.5px no-repeat;
+}
+
+.aggiungi::before,
+.aggiungi::after {
+  content: '';
+  position: absolute;
+  top: 1rem;
+  bottom: 1rem;
+  width: 1.5px;
+  background: repeating-linear-gradient(180deg, var(--tratteggio) 0 0.4rem, transparent 0.4rem 0.75rem);
+}
+
+.aggiungi::before { left: 0; }
+.aggiungi::after { right: 0; }
+.aggiungi:hover { color: var(--inchiostro); }
+
+/* --- Drawn dropdowns (js/tendina.js) ---
+   A field has open corners: lines above and below, and shorter side ticks
+   that do not touch them. The panel below it holds an optional search field
+   and the options. */
+
+.campo {
+  position: relative;
+  display: block;
+  min-width: 0;
+  padding: 0.5rem 1rem;
+  background:
+    linear-gradient(var(--tratto), var(--tratto)) top center / calc(100% - 1.1rem) 1.5px no-repeat,
+    linear-gradient(var(--tratto), var(--tratto)) bottom center / calc(100% - 1.1rem) 1.5px no-repeat;
+}
+
+.campo::before,
+.campo::after {
+  content: '';
+  position: absolute;
+  top: 0.55rem;
+  bottom: 0.55rem;
+  width: 1.5px;
+  background: var(--tratto);
+}
+
+.campo::before { left: 0; }
+.campo::after { right: 0; }
+.campo:focus-within,
+.campo.aperta { --tratto: var(--accento); }
+
+.campo-etichetta { display: block; font-size: 0.72rem; color: var(--tenue); }
+
+.tendina-bottone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.1rem 0;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tendina-bottone:focus-visible { outline: none; }
+
+.tendina-valore {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Course names are lower case in the source; only the display capitalizes. */
+.tendina-valore::first-letter,
+.tendina-testo::first-letter { text-transform: uppercase; }
+
+.facoltativo .tendina-valore { font-weight: 500; }
+
+.tendina-freccia {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  color: var(--tenue);
+  transition: transform 0.15s;
+}
+
+.campo.aperta .tendina-freccia { transform: rotate(180deg); color: var(--accento); }
+
+/* The compact field sits inside a line of text and controls. */
+.campo.compatto { display: inline-block; min-width: 11rem; padding-block: 0.35rem; }
+
+.tendina {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  top: calc(100% + 0.4rem);
+  width: max(100%, min(27rem, calc(100vw - 2rem)));
+  padding: 0.4rem;
+  border: 1px solid var(--linea);
+  border-radius: 14px;
+  background: var(--superficie);
+  box-shadow: 0 2px 4px var(--ombra), 0 18px 44px var(--ombra);
+  animation: tendina-entra 0.14s ease-out;
+}
+
+.tendina.a-destra { left: auto; right: 0; }
+
+@keyframes tendina-entra { from { opacity: 0; transform: translateY(-4px); } }
+
+.tendina-cerca {
+  display: flex;
   align-items: center;
   gap: 0.45rem;
-  max-width: 100%;
+  margin-bottom: 0.35rem;
+  padding: 0.45rem 0.65rem;
   border: 1px solid var(--linea);
-  background: var(--superficie);
-  border-radius: 8px;
-  padding: 0.4rem 0.45rem 0.4rem 0.65rem;
-}
-
-.colonna-scheda select {
-  max-width: 100%;
-  min-width: 0;
-  border-color: transparent;
+  border-radius: 10px;
   background: var(--bg);
-  font-size: 0.9rem;
 }
 
-.colonna-scheda .sel-codice { font-weight: 600; }
+.tendina-cerca:focus-within { border-color: var(--accento); }
+.tendina-lente { flex: none; width: 1rem; height: 1rem; color: var(--tenue); }
 
-/* Course names run up to 187 characters: the menu is capped instead of
-   stretching the row. */
-.colonna-scheda .sel-corso { max-width: min(22rem, 100%); }
-
-.aggiungi {
-  border: 1.5px dashed var(--p4);
+.tendina-cerca input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
   background: none;
-  color: var(--verde-testo);
-  border-radius: 8px;
-  padding: 0.55rem 0.95rem;
+}
+
+.tendina-cerca input:focus-visible { outline: none; }
+
+.tendina-lista {
+  max-height: min(19rem, 50vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.tendina-lista:focus-visible { outline: none; }
+
+.tendina-sezione {
+  padding: 0.55rem 0.65rem 0.25rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  font-size: 0.88rem;
+  color: var(--tenue);
+}
+
+.tendina-lista li[role="option"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.6rem;
+  padding: 0.48rem 0.65rem;
+  border-radius: 9px;
+  font-size: 0.9rem;
   cursor: pointer;
 }
 
-.aggiungi:hover { background: var(--tinta); }
+.tendina-lista li small { grid-column: 1; font-size: 0.74rem; color: var(--tenue); }
+.tendina-lista li.attiva { background: var(--tinta); }
+.tendina-lista li[aria-selected="true"] { font-weight: 600; color: var(--verde-testo); }
+.tendina-lista li[aria-disabled="true"] { color: var(--tenue); cursor: default; }
+
+.tendina-lista mark {
+  background: none;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--ambra);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+.tendina-spunta {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  width: 1rem;
+  height: 1rem;
+  color: var(--accento);
+}
+
+.tendina-vuota { margin: 0; padding: 0.7rem 0.65rem; color: var(--tenue); font-size: 0.88rem; }
 
 .ai-esito {
   margin: 0.75rem 0 0;
@@ -379,8 +635,8 @@ textarea {
 
 .avvisi {
   margin-top: 0.9rem;
-  border: 1px solid var(--p3);
-  border-left: 4px solid var(--p5);
+  border: 1px solid var(--linea-forte);
+  border-left: 4px solid var(--bordo-avviso);
   background: var(--tinta);
   border-radius: 8px;
 }
@@ -519,11 +775,120 @@ dd.valore-campione-piccolo::after {
   white-space: nowrap;
 }
 
+/* Course names are lower case in the source; only the display capitalizes. */
+.intestazione-valore span:last-child::first-letter,
+.paragone-valore-nome::first-letter { text-transform: uppercase; }
+
 /* Names above the numbers live in the header row; on a phone each number
    carries its own. */
 .paragone-valore-nome { display: none; }
 
 .sintesi-vuota { margin: 0; color: var(--tenue); }
+
+/* --- Base view: the 0-10 scores ---
+   One row per key question: the question, then one cell per column with
+   the score, ten marks and the sentence it stands for, or the reason there
+   is no score. */
+
+.voti {
+  --n-colonne: 2;
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) repeat(var(--n-colonne), minmax(0, 1fr));
+  column-gap: 1.6rem;
+}
+
+.voti-riga { display: contents; }
+
+.voti-riga > * {
+  min-width: 0;
+  padding-block: 0.9rem;
+  border-top: 1px solid var(--linea);
+}
+
+.voti-testa + .voti-riga > * { border-top: 0; }
+
+.voti-testa > * {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-block: 0 0.45rem;
+  border-top: 0;
+  border-bottom: 1px solid var(--linea-forte);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--tenue);
+}
+
+.voti-testa .nome-colonna { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Course names are lower case in the source; only the display capitalizes. */
+.nome-colonna::first-letter { text-transform: uppercase; }
+
+.voti-domanda strong { display: block; font-weight: 600; }
+
+.voti-domanda small {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--tenue);
+}
+
+.voto {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.65rem;
+}
+
+.voto > :not(.voto-cifra):not(.tacche) { grid-column: 1 / -1; }
+
+/* The column name repeats beside each score only on a phone. */
+.voto-chi { display: none; }
+
+.voto-cifra {
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  cursor: help;
+}
+
+.voto-cifra small {
+  margin-left: 0.1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--tenue);
+}
+
+.tacche { display: flex; align-items: center; gap: 3px; }
+.tacche i { display: block; width: 6px; height: 15px; border-radius: 3px; background: var(--binario); }
+.tacche i.piena { background: var(--accento); }
+
+.voto-frase,
+.voto-variante {
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--tenue);
+}
+
+.voto-variante { margin: 0 0 0.3rem; }
+
+.voto-motivo { font-size: 0.86rem; color: var(--tenue); }
+.voto-motivo strong { display: block; font-weight: 600; color: var(--inchiostro); }
+
+.come-voto {
+  margin-top: 0.8rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--linea);
+  font-size: 0.86rem;
+}
+
+.come-voto summary { cursor: pointer; font-weight: 600; color: var(--verde-testo); }
+.come-voto ul { max-width: 80ch; margin: 0.5rem 0 0; padding-left: 1.2rem; color: var(--tenue); }
+.come-voto li { margin-bottom: 0.3rem; }
 
 /* --- Question filters --- */
 
@@ -566,7 +931,7 @@ dd.valore-campione-piccolo::after {
 }
 
 .accordion summary::-webkit-details-marker { display: none; }
-.accordion summary::before { content: '▸'; color: var(--p5); transition: transform 0.15s; }
+.accordion summary::before { content: '▸'; color: var(--accento); transition: transform 0.15s; }
 .accordion details[open] > summary::before { transform: rotate(90deg); }
 
 .accordion summary .conteggio {
@@ -598,7 +963,7 @@ dd.valore-campione-piccolo::after {
   cursor: pointer;
 }
 
-.voce-checkbox:hover { border-color: var(--p4); }
+.voce-checkbox:hover { border-color: var(--tratteggio); }
 
 .voce-checkbox input {
   position: absolute;
@@ -635,7 +1000,7 @@ dd.valore-campione-piccolo::after {
   cursor: pointer;
 }
 
-.mostra-tutte:hover { color: var(--inchiostro); border-color: var(--p4); }
+.mostra-tutte:hover { color: var(--inchiostro); border-color: var(--tratteggio); }
 
 /* --- Compare button --- */
 
@@ -834,12 +1199,10 @@ td.cella-campione-piccolo { color: var(--tenue); }
   font-size: 0.82rem;
 }
 
-.riga-definizione-scheda select { font-weight: 400; padding: 0.35rem 0.45rem; }
-
 .avviso-prudenza {
   margin-top: 0.4rem;
   padding: 0.7rem 0.85rem;
-  border-left: 4px solid var(--p5);
+  border-left: 4px solid var(--bordo-avviso);
   border-radius: 0 8px 8px 0;
   background: var(--tinta);
 }
@@ -865,8 +1228,9 @@ td.cella-campione-piccolo { color: var(--tenue); }
   color: var(--tenue);
 }
 
-.cerca-corso-campi input,
-.cerca-corso-campi select {
+.cerca-corso-ateneo { align-self: end; }
+
+.cerca-corso-campi input {
   min-width: 0;
   min-height: 44px;
   padding: 0 0.7rem;
@@ -928,44 +1292,97 @@ td.cella-campione-piccolo { color: var(--tenue); }
   max-height: calc(100vh - 2rem);
   padding: 0;
   border: 1px solid var(--linea);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--superficie);
   color: var(--inchiostro);
-  box-shadow: 0 24px 64px rgba(20, 26, 14, 0.25);
+  box-shadow: 0 24px 64px rgba(16, 32, 31, 0.25);
 }
 
-.dlg-ai::backdrop { background: rgba(22, 26, 18, 0.45); }
+.dlg-ai::backdrop { background: rgba(10, 20, 19, 0.45); }
 
-.dlg-testa {
-  display: flex;
-  align-items: center;
-  padding: 0.85rem 1.1rem;
-  border-bottom: 1px solid var(--linea);
-}
-
-.dlg-testa h3 { flex: 1; margin: 0; font-size: 1.02rem; font-weight: 800; }
+.dlg-chiudi { position: absolute; top: 0.6rem; right: 0.6rem; }
 
 .dlg-corpo {
   display: grid;
-  gap: 0.75rem;
-  padding: 0.9rem 1.1rem 1.1rem;
+  gap: 0.85rem;
+  padding: 1.1rem 1.2rem 1.2rem;
+  background:
+    radial-gradient(ellipse 70% 40% at 70% 60%, color-mix(in srgb, var(--alone) 60%, transparent), transparent 70%),
+    var(--superficie);
 }
 
-.dlg-corpo > p { margin: 0; color: var(--tenue); font-size: 0.87rem; }
+/* The empty state of the AI Chatbot UI reference: a sparkle, a title and
+   one sentence, then the suggestions and the request. */
+.ai-vuoto { padding: 1.4rem 0 0.4rem; text-align: center; }
+.ai-scintilla { font-size: 1.7rem; line-height: 1; color: var(--verde-testo); }
+.ai-vuoto h3 { margin: 0.55rem 0 0.25rem; font-size: 1.2rem; font-weight: 600; }
+.ai-vuoto p { max-width: 46ch; margin: 0 auto; font-size: 0.87rem; color: var(--tenue); }
+
+.ai-suggerimenti-titolo { margin: 0 0 0.4rem; font-size: 0.78rem; font-weight: 600; color: var(--tenue); }
+.ai-suggerimenti div { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; }
+
+.ai-suggerimento {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--superficie) 85%, transparent);
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-suggerimento:hover { border-color: var(--tratteggio); }
+
+.ai-richiesta {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.8rem;
+  border: 1px solid var(--tratteggio);
+  border-radius: 12px;
+  background: var(--superficie);
+}
+
+.ai-richiesta:focus-within {
+  border-color: var(--accento);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accento) 25%, transparent);
+}
 
 #ai-frase {
-  width: 100%;
-  min-height: 4.5rem;
+  flex: 1;
+  min-width: 0;
+  min-height: 2.6rem;
+  padding: 0.45rem 0;
+  border: 0;
+  background: none;
   resize: vertical;
-  padding: 0.55rem 0.65rem;
-  border-radius: 8px;
-  background: var(--bg);
 }
 
+#ai-frase:focus-visible { outline: none; }
+
+.ai-invia {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.3rem;
+  height: 2.3rem;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accento);
+  color: var(--su-accento);
+  cursor: pointer;
+}
+
+.ai-invia:disabled { opacity: 0.55; cursor: default; }
+.ai-invia svg { width: 1.1rem; height: 1.1rem; }
+
+.ai-garanzia { margin: 0; font-size: 0.78rem; text-align: center; color: var(--tenue); }
+
 .dlg-corpo details {
+  padding: 0.5rem 0.75rem;
   border: 1px solid var(--linea);
   border-radius: 8px;
-  padding: 0.5rem 0.75rem;
+  background: var(--superficie);
   font-size: 0.87rem;
 }
 
@@ -989,7 +1406,6 @@ td.cella-campione-piccolo { color: var(--tenue); }
   color: var(--tenue);
 }
 
-.ai-config select,
 .ai-config input { padding: 0.4rem 0.5rem; color: var(--inchiostro); }
 
 .ai-avviso { margin: 0.75rem 0 0; font-size: 0.78rem; color: var(--tenue); }
@@ -1057,7 +1473,49 @@ td.cella-campione-piccolo { color: var(--tenue); }
 
 @media (max-width: 760px) {
   .contenitore { padding-inline: 1rem; }
-  .btn-ai .testo { display: none; }
+
+  /* The bar keeps the title, the switch and the theme; the navigation
+     becomes a pill fixed at the bottom of the screen. */
+  .testata { padding: 0.5rem 0.6rem 0.3rem; }
+  .testata-barra { gap: 0.55rem; padding: 0.45rem 0.45rem 0.45rem 0.85rem; border-radius: 14px; }
+  .marchio h1 { font-size: 0.98rem; line-height: 1.2; }
+  .marchio p { display: none; }
+  .modo { gap: 0.35rem; font-size: 0.78rem; }
+  .btn-tema { width: 2rem; height: 2rem; }
+  .navigazione {
+    position: fixed;
+    z-index: 20;
+    left: 50%;
+    bottom: max(0.8rem, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    box-shadow: 0 10px 30px var(--ombra);
+  }
+  .voce-nav { flex-direction: column; gap: 0.1rem; padding: 0.4rem 0.95rem; font-size: 0.7rem; }
+  .voce-nav .testo-lungo { display: none; }
+  .voce-nav .testo-corto { display: inline; }
+  body { padding-bottom: 5rem; }
+
+  .colonne-riga { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  .aggiungi { min-height: 3.2rem; margin-top: 0; }
+  .tendina { width: 100%; }
+
+  /* Scores stack: the question, then each column with its own name. */
+  .voti { grid-template-columns: minmax(0, 1fr); }
+  .voti-testa { display: none; }
+  .voti-riga > * { border-top: 0; padding-block: 0.3rem; }
+  .voti-riga > .voti-domanda { border-top: 1px solid var(--linea); padding-top: 0.9rem; }
+  .voti-testa + .voti-riga > .voti-domanda { border-top: 0; }
+  .voti-riga > :last-child { padding-bottom: 0.9rem; }
+  .voto-chi {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.25rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--tenue);
+  }
+  .ai-suggerimenti div { grid-template-columns: 1fr; }
 
   /* The ruler stacks: question, line, then each value with its own name. */
   .paragone-riga { grid-template-columns: minmax(0, 1fr); row-gap: 0.45rem; }
