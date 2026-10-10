@@ -23,7 +23,7 @@ import {
 } from './db-corsi.js';
 import {
   INDICATORI_CRUSCOTTO,
-  INDICATORI_SOLO_SCHEDA,
+  ALTRI_INDICATORI_PRINCIPALI,
   etichettaUfficiale,
   scalaPer,
   posizioneSu,
@@ -33,6 +33,7 @@ import {
 import { calcolaVoto, fraseVoto, SOGLIA_RISPONDENTI } from './voto.js';
 import { TERMINI_PARAGONE } from './termini-paragone.js';
 import { creaTendina, potenziaSelect } from './tendina.js';
+import { creaXlsx } from './esporta-xlsx.js';
 
 const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
 
@@ -60,6 +61,10 @@ let codiciGruppo = [];
 // are looked up inside that university's database.
 let colonne = [];
 let contatoreColonne = 0;
+// The full table as last drawn by renderTabella(), for the Excel download:
+// { colonne: [{ colonna, numerosita }], righe: [{ macro, domanda, opzione,
+// celle: [{ valore, testo, piccolo }] }] }, or null when it shows no values.
+let tabellaMostrata = null;
 
 // --- Definition of "employed" (only the `occupazione` employment outcomes survey) ---
 // AlmaLaurea sheets contain TWO complete versions of these data, one for each
@@ -134,7 +139,7 @@ const elRisultato = document.getElementById('risultato');
 const elAzioneConfronta = document.getElementById('azione-confronta');
 
 // One marker per comparison column, shared by the column selector, the table
-// header, the summary and the course sheet, so a value can be matched to its
+// header and the summary, so a value can be matched to its
 // column at a glance. Columns differ by SHAPE first and by tone second (the
 // tones are CSS classes f0..f5 in style.css): several greens alone would not
 // be enough. Shapes are drawn on a 12x12 box.
@@ -353,7 +358,7 @@ const AGGIORNA_CAMPI_COLONNA = new Map();
  * their "change" events, so the handlers below are the only place where the
  * state changes.
  *
- * A course column created here (from the course sheet) needs its university
+ * A course column created here needs its university
  * too, since course codes are looked up inside that university's database;
  * the course download starts at once and the table redraws when it ends.
  *
@@ -566,10 +571,10 @@ const conteggiPerMacro = new Map();
 const ELEMENTO_VOCE = new Map();
 
 // The main questions, selected when the page opens: the ones behind the key
-// indicators of the summary and of the course sheet (indicatori-chiave.js),
-// matched on survey and category, so the editorial choice lives in one file.
+// indicators (indicatori-chiave.js), matched on survey and category, so the
+// editorial choice lives in one file.
 const ID_PRINCIPALI = new Set();
-for (const ind of [...INDICATORI_CRUSCOTTO, ...INDICATORI_SOLO_SCHEDA]) {
+for (const ind of [...INDICATORI_CRUSCOTTO, ...ALTRI_INDICATORI_PRINCIPALI]) {
   for (const { voce } of VOCE_PER_ID.values()) {
     if (voce.indagine === ind.indagine && voce.categoria === ind.categoria &&
         voce.indicatori.includes(ind.indicatore)) {
@@ -748,9 +753,6 @@ function renderSelettoreDefinizione() {
     aggiornaNotaDefinizione();
     aggiornaVisibilitaVoci();
     renderTabella();
-    // The course sheet reads the same definition; its own selector only
-    // forwards here, so both views always agree.
-    renderScheda();
   });
 
   aggiornaNotaDefinizione();
@@ -987,13 +989,6 @@ function formattaIntestazioneColonna(colonna, numerosita, indaginiMostrate, inCa
         : `${formattaNumero(n.laureati)} laureati`;
     contenitore.appendChild(riga);
   }
-
-  if (colonna.tipo === 'corso' && !inCaricamento && !colonna.errore) {
-    contenitore.appendChild(
-      el('a', { class: 'link-scheda', href: indirizzoScheda(colonna.ateneo, colonna.codice) },
-        'Apri la scheda del corso')
-    );
-  }
   return contenitore;
 }
 
@@ -1035,7 +1030,10 @@ function creaCellaValore(infoValore, campione) {
   td.className = infoValore.valore !== null && infoValore.valore !== undefined
     ? 'cella-valore'
     : 'cella-nota';
-  if (campionePiccolo(campione)) td.classList.add('cella-campione-piccolo');
+  // The small-sample mark qualifies a number: a note in its place gets none.
+  if (td.className === 'cella-valore' && campionePiccolo(campione)) {
+    td.classList.add('cella-campione-piccolo');
+  }
 
   const righe = [];
   if (campione) righe.push(testoCampione(campione));
@@ -1052,8 +1050,10 @@ function creaCellaValore(infoValore, campione) {
  *
  * @returns {HTMLElement} Explanatory cell.
  */
+const TESTO_SOLO_CORSO = 'solo per i corsi';
+
 function creaCellaSoloCorso() {
-  const td = creaCellaTesto('solo per i corsi', 'cella-solo-corso');
+  const td = creaCellaTesto(TESTO_SOLO_CORSO, 'cella-solo-corso');
   td.title =
     'Domanda posta solo ai laureati di primo livello: AlmaLaurea la pubblica per ' +
     'il singolo corso, non per atenei e gruppi, che mettono insieme tutti i tipi di laurea.';
@@ -1170,6 +1170,7 @@ function renderTabella() {
   // cells below the threshold, can change.
   let sottoSoglia = 0;
   aggiornaLegendaCampione(0);
+  tabellaMostrata = null;
 
   // Course-only questions follow the columns: adding or removing a course
   // column shows or hides them in the filters too, with their counters.
@@ -1177,13 +1178,8 @@ function renderTabella() {
   aggiornaNotaDefinizione();
 
   // Release course databases no column shows any more. Universities in use
-  // are never closed, so this is safe before the queries below. The course
-  // sheet's university counts as in use too, or a redraw here could close the
-  // database the sheet is reading.
-  liberaAteneiNonUsati([
-    ...colonne.filter((c) => c.tipo === 'corso').map((c) => c.ateneo),
-    ...(statoScheda ? [statoScheda.ateneo] : []),
-  ]);
+  // are never closed, so this is safe before the queries below.
+  liberaAteneiNonUsati(colonne.filter((c) => c.tipo === 'corso').map((c) => c.ateneo));
 
   // The selector boxes follow the column order, which removals change.
   colonne.forEach((c, i) => {
@@ -1240,6 +1236,10 @@ function renderTabella() {
     trHead.appendChild(th);
   }
   elTabellaHead.appendChild(trHead);
+  const modello = {
+    colonne: datiPerColonna.map(({ colonna, numerosita }) => ({ colonna, numerosita })),
+    righe: [],
+  };
 
   // --- Body grouped by macro-category ---
 
@@ -1252,6 +1252,8 @@ function renderTabella() {
     return;
   }
 
+  // The download writes the table exactly as shown, from this model.
+  tabellaMostrata = modello;
   for (const { macro, voci } of gruppi) {
     const trMacro = document.createElement('tr');
     trMacro.className = 'riga-macro-categoria';
@@ -1269,9 +1271,11 @@ function renderTabella() {
         tr.appendChild(creaCellaTesto(voce.label, 'colonna-domanda'));
         const k = chiave(voce.indagine, voce.categoria, voce.indicatori[0]);
         const celle = [];
+        const celleModello = [];
         for (const { colonna, mappa, numerosita } of datiPerColonna) {
           if (voce.soloCorso && colonna.tipo !== 'corso') {
             tr.appendChild(creaCellaSoloCorso());
+            celleModello.push({ valore: null, testo: TESTO_SOLO_CORSO, piccolo: false });
             continue;
           }
           const campione = campioneDellaRiga(numerosita, voce.indagine);
@@ -1279,10 +1283,16 @@ function renderTabella() {
           const cella = creaCellaValore(info, campione);
           if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
           celle.push({ td: cella, valore: info?.valore });
+          celleModello.push({
+            valore: info?.valore ?? null,
+            testo: cella.textContent,
+            piccolo: cella.classList.contains('cella-campione-piccolo'),
+          });
           tr.appendChild(cella);
         }
         segnaMassimo(celle);
         elTabellaBody.appendChild(tr);
+        modello.righe.push({ macro, domanda: voce.label, opzione: '', celle: celleModello });
       } else {
         // Multi-option question: a title row without values followed by one
         // sub-row per indicator, using the same sheet columns.
@@ -1300,9 +1310,11 @@ function renderTabella() {
           tr.appendChild(creaCellaTesto(indicatore, 'colonna-domanda'));
           const k = chiave(voce.indagine, voce.categoria, indicatore);
           const celle = [];
+          const celleModello = [];
           for (const { colonna, mappa, numerosita } of datiPerColonna) {
             if (voce.soloCorso && colonna.tipo !== 'corso') {
               tr.appendChild(creaCellaSoloCorso());
+              celleModello.push({ valore: null, testo: TESTO_SOLO_CORSO, piccolo: false });
               continue;
             }
             const campione = campioneDellaRiga(numerosita, voce.indagine);
@@ -1310,10 +1322,16 @@ function renderTabella() {
             const cella = creaCellaValore(info, campione);
             if (cella.classList.contains('cella-campione-piccolo')) sottoSoglia++;
             celle.push({ td: cella, valore: info?.valore });
+            celleModello.push({
+              valore: info?.valore ?? null,
+              testo: cella.textContent,
+              piccolo: cella.classList.contains('cella-campione-piccolo'),
+            });
             tr.appendChild(cella);
           }
           segnaMassimo(celle);
           elTabellaBody.appendChild(tr);
+          modello.righe.push({ macro, domanda: voce.label, opzione: indicatore, celle: celleModello });
         }
       }
     }
@@ -1322,11 +1340,10 @@ function renderTabella() {
   aggiornaLegendaCampione(sottoSoglia);
 }
 
-// --- 5b. The ruler: summary ("In sintesi") and course sheet rows ---
+// --- 5b. The ruler: summary ("In sintesi") rows ---
 // One visual language for key numbers: a row per indicator with the question,
 // a line on a fixed scale carrying one marker per column, and the values.
-// The summary draws it for the columns of the comparison, the course sheet
-// for the course, its university and its group.
+// The summary draws it for the columns of the comparison.
 
 /**
  * Returns the text of one key value.
@@ -1367,10 +1384,11 @@ function creaRigaRighello(ind, entita) {
       e,
       info,
       campione,
-      piccolo: campionePiccolo(campione),
       haValore: info?.valore !== null && info?.valore !== undefined,
     };
   });
+  // The small-sample mark qualifies a number: a note in its place gets none.
+  for (const l of letture) l.piccolo = l.haValore && campionePiccolo(l.campione);
   const scala = scalaPer(ind.unita, letture.filter((l) => l.haValore).map((l) => l.info.valore));
   const [estremoMin, estremoMax] = etichetteScala(scala, ind.unita);
 
@@ -1785,411 +1803,89 @@ function renderVoti(datiPerColonna) {
   aggiornaParagoneVoti(datiPerColonna, gruppiCorsi);
 }
 
-// --- 5d. Course sheet ("Scheda del corso") ---
-// One course next to its university and its discipline group, on the key
-// indicators. The three sheets are the official ones: nothing is averaged or
-// recomputed to build the comparison.
+// --- 5d. Excel download of the full table ---
+// The file is the table on screen: the same columns and questions, values as
+// AlmaLaurea publishes them. Numbers stay numbers, so the file can be sorted
+// and charted; notes stay text. Small samples are in italics, explained on a
+// second sheet together with the sample sizes behind every column.
 
-// The sheet on screen, or null while no course is chosen:
-// { ateneo, corso, gruppo, tipoCorso, errore, inCaricamento }.
-let statoScheda = null;
-let vistaCorrente = 'confronto';
+const elBtnExcel = document.getElementById('btn-excel');
 
-const elVistaConfronto = document.getElementById('vista-confronto');
-const elVistaScheda = document.getElementById('vista-scheda');
-const elTabConfronto = document.getElementById('tab-confronto');
-const elTabScheda = document.getElementById('tab-scheda');
-const elSchedaCorso = document.getElementById('scheda-corso');
-const elTitoloCercaCorso = document.getElementById('titolo-cerca-corso');
-const elCercaTesto = document.getElementById('cerca-corso-testo');
-const elCercaAteneo = document.getElementById('cerca-corso-ateneo');
-const elCercaConteggio = document.getElementById('cerca-corso-conteggio');
-const elCercaRisultati = document.getElementById('cerca-corso-risultati');
-
-// Course databases hold first-level degrees only (tipo_corso 'L'); an
-// unknown type simply gets no label rather than a guessed one.
-const NOME_TIPO_CORSO = { L: 'Laurea di primo livello' };
+const NOME_TIPO_COLONNA = { ateneo: 'Ateneo', gruppo: 'Area disciplinare', corso: 'Corso di laurea' };
 
 /**
- * Returns the address of a course sheet.
+ * Returns a column name for the file. Course names are lower case in the
+ * source, so the first letter is capitalized here as the page does in CSS,
+ * and a course carries its university, as in the table header.
  *
- * @param {string} ateneo - University code.
- * @param {string} corso - Course code.
- * @returns {string} Hash address.
+ * @param {object} colonna - Column of the comparison.
+ * @returns {string} Column name.
  */
-function indirizzoScheda(ateneo, corso) {
-  return `#scheda/${ateneo}/${corso}`;
+function nomeColonnaFile(colonna) {
+  const nome = etichettaColonna(colonna);
+  const maiuscolo = nome.charAt(0).toUpperCase() + nome.slice(1);
+  return colonna.tipo === 'corso'
+    ? `${maiuscolo} (${etichettaCodice('ateneo', colonna.ateneo)})`
+    : maiuscolo;
 }
 
 /**
- * Tells whether a course exists, reading only own keys: codes come from the
- * address bar, and a key like "__proto__" must not pass for a university.
+ * Builds the two sheets of the download from the table model.
  *
- * @param {string} ateneo - University code.
- * @param {string} corso - Course code.
- * @returns {boolean} Whether the course is in nomi-corso.js.
+ * @param {NonNullable<typeof tabellaMostrata>} modello - Table on screen.
+ * @param {Date} adesso - Download time.
+ * @returns {import('./esporta-xlsx.js').FoglioXlsx[]} Sheets.
  */
-function corsoEsiste(ateneo, corso) {
-  return Object.hasOwn(NOMI_CORSO, ateneo) && Object.hasOwn(NOMI_CORSO[ateneo], corso);
-}
-
-/**
- * Opens the sheet of one course, downloading its university if needed.
- *
- * @param {string} ateneo - University code.
- * @param {string} corso - Course code.
- */
-async function apriScheda(ateneo, corso) {
-  const stato = { ateneo, corso, gruppo: null, tipoCorso: null, errore: null, inCaricamento: true };
-  statoScheda = stato;
-  renderScheda();
-  try {
-    const dbAteneo = await caricaAteneoCorsi(ateneo);
-    const descrizione = descriviCorso(dbAteneo, corso);
-    if (!descrizione) throw new Error('Il database dei corsi non contiene dati per questo corso.');
-    stato.gruppo = descrizione.gruppo;
-    stato.tipoCorso = descrizione.tipoCorso;
-  } catch (errore) {
-    stato.errore = errore.message;
-  }
-  stato.inCaricamento = false;
-  // The user may have opened another course while this one was downloading.
-  if (statoScheda === stato) renderScheda();
-}
-
-/**
- * Creates the box that states the samples behind the course values.
- *
- * @param {Map} numerosita - Sample sizes of the course, by survey.
- * @returns {HTMLElement} Sample box.
- */
-function creaRiquadroCampione(numerosita) {
-  const profilo = numerosita.get('profilo');
-  const occupazione = numerosita.get('occupazione');
-  const voce = (etichetta, n) =>
-    el('div', { class: 'campione-voce' },
-      el('dt', {}, etichetta),
-      el('dd', { class: n != null && n < SOGLIA_CAMPIONE_PICCOLO ? 'valore-campione-piccolo' : null },
-        formattaNumero(n))
-    );
-
-  const riquadro = el('section', { class: 'riquadro-campione' },
-    el('h3', {}, 'Su quanti dati si basa il corso'),
-    el('dl', {},
-      voce('Laureati', profilo?.laureati),
-      voce('Hanno compilato il questionario', profilo?.compilatori),
-      voce('Intervistati sul lavoro', occupazione?.compilatori)
-    ),
-    el('p', { class: 'nota-riquadro' },
-      `Il segno pieno vuol dire almeno ${SOGLIA_CAMPIONE_PICCOLO} rispondenti; quello vuoto, ` +
-      'con l\'asterisco sul valore, meno: su così pochi casi una percentuale è instabile.')
-  );
-
-  if (definizioniDisponibili.length >= 2) {
-    const sel = el('select', { id: 'sel-definizione-scheda' },
-      ...definizioniDisponibili.map((d) => new Option(d, d)));
-    sel.value = definizioneScelta;
-    // Forwarded to the comparison's selector, whose handler redraws both views.
-    sel.addEventListener('change', () => {
-      elSelDefinizione.value = sel.value;
-      elSelDefinizione.dispatchEvent(new Event('change'));
-    });
-    const riga = el('div', { class: 'riga-definizione-scheda' }, sel);
-    potenziaSelect(sel, { etichetta: 'Definizione di «occupato»' });
-    riquadro.append(riga, el('p', { class: 'nota-riquadro' }, TESTO_DEFINIZIONE[definizioneScelta] ?? ''));
-  }
-  return riquadro;
-}
-
-/** Replaces the comparison with the course, its university and its group. */
-function confrontaSchedaSuTutto() {
-  const { ateneo, corso, gruppo } = statoScheda;
-  elColonneSchede.replaceChildren();
-  colonne = [];
-  creaColonna('corso', corso, ateneo);
-  creaColonna('ateneo', ateneo);
-  if (codiciGruppo.includes(gruppo)) creaColonna('gruppo', gruppo);
-  // Asking for every question is asking to compare: the table opens.
-  mostraRisultato(false);
-  renderTabella();
-  location.hash = '#confronto';
-}
-
-/** Adds the course to the columns already in the comparison. */
-function aggiungiSchedaAlConfronto() {
-  creaColonna('corso', statoScheda.corso, statoScheda.ateneo);
-  renderTabella();
-  location.hash = '#confronto';
-}
-
-/**
- * Copies the sheet's address, which is enough to reopen it.
- *
- * @param {HTMLButtonElement} pulsante - Button whose label reports the outcome.
- */
-async function copiaLinkScheda(pulsante) {
-  try {
-    await navigator.clipboard.writeText(location.href);
-    pulsante.textContent = 'Link copiato';
-  } catch {
-    pulsante.textContent = 'Copia dalla barra degli indirizzi';
-  }
-}
-
-/** Renders the course sheet from statoScheda and the selected definition. */
-function renderScheda() {
-  elTabScheda.setAttribute(
-    'href', statoScheda ? indirizzoScheda(statoScheda.ateneo, statoScheda.corso) : '#scheda'
-  );
-  if (!statoScheda) {
-    elSchedaCorso.classList.add('nascosto');
-    elSchedaCorso.replaceChildren();
-    elTitoloCercaCorso.textContent = 'Cerca un corso';
-    return;
-  }
-  elTitoloCercaCorso.textContent = 'Cerca un altro corso';
-  elSchedaCorso.classList.remove('nascosto');
-
-  // The sheet is rebuilt on every change; keep focus on the control in use.
-  const fuoco = elSchedaCorso.contains(document.activeElement) ? document.activeElement.id : '';
-
-  const { ateneo, corso, gruppo, tipoCorso } = statoScheda;
-  const nomeAteneo = etichettaCodice('ateneo', ateneo);
-  const nomeGruppo = gruppo ? etichettaCodice('gruppo', gruppo) : null;
-
-  const identita = el('div', { class: 'scheda-identita' },
-    el('p', { class: 'scheda-briciole scheda-etichette' },
-      el('span', {}, nomeAteneo),
-      nomeGruppo ? el('span', {}, nomeGruppo) : null,
-      NOME_TIPO_CORSO[tipoCorso] ? el('span', {}, NOME_TIPO_CORSO[tipoCorso]) : null
-    ),
-    el('h2', { class: 'scheda-titolo' }, NOMI_CORSO[ateneo][corso])
-  );
-
-  if (statoScheda.inCaricamento) {
-    elSchedaCorso.replaceChildren(
-      el('div', { class: 'scheda-testa' }, identita),
-      el('p', { class: 'banda-stato' }, `Carico i corsi di ${nomeAteneo}…`)
-    );
-    return;
-  }
-  if (statoScheda.errore) {
-    elSchedaCorso.replaceChildren(
-      el('div', { class: 'scheda-testa' }, identita),
-      el('p', { class: 'banda-errore' }, statoScheda.errore)
-    );
-    return;
-  }
-  const dbAteneo = ateneoCaricato(ateneo);
-  if (!dbAteneo) {
-    // Closed to make room for other universities: download it again.
-    apriScheda(ateneo, corso);
-    return;
-  }
-
-  const datiCorso = costruisciScheda(interrogaCorso(dbAteneo, corso, definizioneScelta));
-  // Same markers as the first three columns of a comparison: the course is
-  // the circle, its university the diamond, its group the square.
-  const entita = [
-    { chiave: 'corso', indice: 0, nome: 'Il corso', breve: 'Corso', dati: datiCorso },
-    {
-      chiave: 'ateneo', indice: 1, nome: `Ateneo: ${nomeAteneo}`, breve: nomeAteneo,
-      dati: interrogaScheda({ tipo: 'ateneo', codice: ateneo }),
-    },
-    {
-      chiave: 'area', indice: 2, nome: nomeGruppo ? `Area ${nomeGruppo}, tutta Italia` : 'Area',
-      breve: 'Area',
-      dati: codiciGruppo.includes(gruppo) ? interrogaScheda({ tipo: 'gruppo', codice: gruppo }) : null,
-    },
+function fogliExcel(modello, adesso) {
+  const g = (v) => ({ v, stile: 'grassetto' });
+  const confronto = [
+    [g('Macro-categoria'), g('Domanda'), g('Opzione'), ...modello.colonne.map((c) => g(nomeColonnaFile(c.colonna)))],
+    ...modello.righe.map((r) => [r.macro, r.domanda, r.opzione, ...r.celle.map((c) => {
+      if (c.valore === null) return { v: c.testo, stile: 'corsivo' };
+      return c.piccolo ? { v: c.valore, stile: 'corsivo' } : c.valore;
+    })]),
   ];
-
-  const btnTutto = el('button', { type: 'button', class: 'btn-pri' },
-    'Confronta su tutte le domande');
-  btnTutto.addEventListener('click', confrontaSchedaSuTutto);
-  const btnAggiungi = el('button', { type: 'button', class: 'btn-sec' },
-    'Aggiungi al confronto');
-  btnAggiungi.addEventListener('click', aggiungiSchedaAlConfronto);
-  const btnLink = el('button', { type: 'button', class: 'btn-sec' }, 'Copia il link');
-  btnLink.addEventListener('click', () => copiaLinkScheda(btnLink));
-
-  const elRighe = el('div', { class: 'righe' });
-  const piccoli = disegnaRighello(elRighe, [...INDICATORI_CRUSCOTTO, ...INDICATORI_SOLO_SCHEDA], entita);
-
-  const paragone = el('section', { class: 'scheda-paragone' },
-    el('h2', {}, 'Il corso accanto ai suoi termini di paragone'),
-    el('ul', { class: 'paragone-legenda' },
-      ...entita.map((e) => el('li', {}, creaSegno(e.indice), e.nome))),
-    elRighe,
-    piccoli.some((riga) => riga[0])
-      ? el('p', { class: 'nota' },
-        `* Valore del corso basato su meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: ` +
-        'le differenze piccole con ateneo e area non sono significative.')
-      : null
-  );
-
-  const prudenza = el('section', { class: 'avviso-prudenza' },
-    el('h3', {}, 'Leggere il paragone con prudenza'),
-    el('p', {},
-      'Ateneo e area mettono insieme tutti i tipi di laurea, triennali, magistrali e a ciclo ' +
-      'unico, mentre il corso è una laurea di primo livello. Il paragone orienta, non misura ' +
-      'una differenza esatta.')
-  );
-
-  elSchedaCorso.replaceChildren(
-    el('div', { class: 'scheda-testa' },
-      identita,
-      el('div', { class: 'scheda-azioni' }, btnTutto, btnAggiungi, btnLink)
-    ),
-    el('div', { class: 'scheda-corpo' },
-      paragone,
-      el('aside', { class: 'scheda-lato' }, creaRiquadroCampione(datiCorso.numerosita), prudenza)
-    ),
-    el('p', { class: 'nota-piccola scheda-fonte' },
-      'Fonte: AlmaLaurea, schede statistiche del corso, dell’ateneo e del gruppo ' +
-      'disciplinare. Nessun valore è ricalcolato.')
-  );
-
-  if (fuoco) document.getElementById(fuoco)?.focus();
+  const n = (numerosita, indagine, campo) => numerosita.get(indagine)?.[campo] ?? null;
+  const note = [
+    [g('Fonte'), 'Dati ufficiali AlmaLaurea 2025, schede pubblicate su almalaurea.it'],
+    [g('Scaricato il'), adesso.toLocaleDateString('it-IT')],
+    [g('Definizione di «occupato»'), `${definizioneScelta}: ${TESTO_DEFINIZIONE[definizioneScelta] ?? ''}`],
+    [g('Numeri in corsivo'), `Meno di ${SOGLIA_CAMPIONE_PICCOLO} rispondenti: il valore cambia molto da un anno all'altro.`],
+    [g('Testi al posto dei numeri'), 'Note di AlmaLaurea: per esempio «Campione piccolo» quando il dato è nascosto perché i casi sono meno di 5.'],
+    [g('Pagina'), location.href.split('#')[0]],
+    [],
+    [g('Colonna'), g('Tipo'), g('Laureati'), g('Hanno compilato il questionario'),
+      g('Laureati (indagine sul lavoro)'), g('Intervistati sul lavoro')],
+    ...modello.colonne.map(({ colonna, numerosita }) => [
+      nomeColonnaFile(colonna), NOME_TIPO_COLONNA[colonna.tipo] ?? colonna.tipo,
+      n(numerosita, 'profilo', 'laureati'), n(numerosita, 'profilo', 'compilatori'),
+      n(numerosita, 'occupazione', 'laureati'), n(numerosita, 'occupazione', 'compilatori'),
+    ]),
+  ];
+  return [
+    { nome: 'Confronto', righe: confronto, larghezze: [24, 46, 40, ...modello.colonne.map(() => 22)], bloccaPrima: true },
+    { nome: 'Note', righe: note, larghezze: [34, 60, 14, 18, 18, 18] },
+  ];
 }
 
-// --- Course search ---
-
-/**
- * Lower-cases a string and strips its accents, so "universita" finds
- * "università".
- *
- * @param {string} testo - Text to normalize.
- * @returns {string} Normalized text.
- */
-const normalizza = (testo) => testo.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-
-// Built on first search from nomi-corso.js alone: searching downloads nothing.
-let indiceCorsi = null;
-const LIMITE_RISULTATI = 60;
-
-/** @returns {object[]} Every course, with the text a search matches against. */
-function indiceDeiCorsi() {
-  if (!indiceCorsi) {
-    indiceCorsi = [];
-    for (const ateneo of codiciOrdinatiPerVisualizzazione('ateneo')) {
-      const nomeAteneo = etichettaCodice('ateneo', ateneo);
-      const corsi = Object.entries(NOMI_CORSO[ateneo] ?? {})
-        .sort(([, a], [, b]) => a.localeCompare(b, 'it'));
-      for (const [codice, nome] of corsi) {
-        indiceCorsi.push({ ateneo, codice, nome, nomeAteneo, testo: normalizza(`${nome} ${nomeAteneo}`) });
-      }
-    }
-  }
-  return indiceCorsi;
+/** Downloads the full table on screen as an .xlsx file. */
+function scaricaExcel() {
+  if (!tabellaMostrata) return;
+  const adesso = new Date();
+  const dati = creaXlsx(fogliExcel(tabellaMostrata, adesso));
+  const giorno = [adesso.getFullYear(), adesso.getMonth() + 1, adesso.getDate()]
+    .map((x) => String(x).padStart(2, '0')).join('-');
+  const url = URL.createObjectURL(new Blob([dati], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }));
+  const link = el('a', { href: url, download: `confronto-almalaurea-${giorno}.xlsx` });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  // Revoked later, not at once: some browsers start the download after click() returns.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
-
-/** Updates the course list from the search box and the university filter. */
-function aggiornaRicercaCorsi() {
-  const parole = normalizza(elCercaTesto.value).split(/\s+/).filter(Boolean);
-  const ateneo = elCercaAteneo.value;
-  if (!ateneo && parole.join('').length < 2) {
-    elCercaConteggio.textContent =
-      'Scrivi almeno due lettere del nome del corso, oppure scegli un ateneo per vedere tutti i suoi corsi.';
-    elCercaRisultati.replaceChildren();
-    return;
-  }
-
-  const trovati = indiceDeiCorsi().filter((c) =>
-    (!ateneo || c.ateneo === ateneo) && parole.every((p) => c.testo.includes(p)));
-  // A single university never has so many courses that the list needs a cap.
-  const mostrati = ateneo ? trovati : trovati.slice(0, LIMITE_RISULTATI);
-
-  if (trovati.length === 0) {
-    elCercaConteggio.textContent = 'Nessun corso trovato. Prova con meno parole o con un altro ateneo.';
-  } else if (mostrati.length < trovati.length) {
-    elCercaConteggio.textContent =
-      `${formattaNumero(trovati.length)} corsi trovati: ecco i primi ${mostrati.length}. ` +
-      'Aggiungi una parola o scegli un ateneo per restringere.';
-  } else {
-    elCercaConteggio.textContent =
-      `${trovati.length} ${trovati.length === 1 ? 'corso trovato' : 'corsi trovati'}.`;
-  }
-
-  elCercaRisultati.replaceChildren(...mostrati.map((c) =>
-    el('li', {},
-      el('a', {
-        href: indirizzoScheda(c.ateneo, c.codice),
-        'aria-current': statoScheda?.ateneo === c.ateneo && statoScheda?.corso === c.codice ? 'page' : null,
-      },
-        el('span', { class: 'risultato-nome' }, c.nome),
-        el('span', { class: 'risultato-ateneo' }, c.nomeAteneo)
-      )
-    )
-  ));
-}
-
-/** Fills the university filter and wires the search box. */
-function preparaRicercaCorsi() {
-  for (const codice of codiciOrdinatiPerVisualizzazione('ateneo')) {
-    elCercaAteneo.append(new Option(etichettaCodice('ateneo', codice), codice));
-  }
-  potenziaSelect(elCercaAteneo, { etichetta: 'Ateneo', cerca: true, segnaposto: 'Cerca un ateneo' });
-  elCercaTesto.addEventListener('input', aggiornaRicercaCorsi);
-  elCercaAteneo.addEventListener('change', aggiornaRicercaCorsi);
-  aggiornaRicercaCorsi();
-}
-
-// --- Views and addresses ---
-
-/**
- * Shows one of the two views.
- *
- * @param {string} vista - 'confronto' or 'scheda'.
- */
-function mostraVista(vista) {
-  const scheda = vista === 'scheda';
-  elVistaConfronto.classList.toggle('nascosto', scheda);
-  elVistaScheda.classList.toggle('nascosto', !scheda);
-  if (scheda) {
-    elTabScheda.setAttribute('aria-current', 'page');
-    elTabConfronto.removeAttribute('aria-current');
-  } else {
-    elTabConfronto.setAttribute('aria-current', 'page');
-    elTabScheda.removeAttribute('aria-current');
-  }
-  if (vista !== vistaCorrente) window.scrollTo(0, 0);
-  vistaCorrente = vista;
-}
-
-/**
- * Applies the address: #confronto (or nothing), #scheda, or
- * #scheda/<university>/<course>.
- */
-function applicaRotta() {
-  let indirizzo = '';
-  try {
-    indirizzo = decodeURIComponent(location.hash.slice(1));
-  } catch {
-    // A malformed escape in a hand-edited address: fall back to the comparison.
-  }
-  const [vista, ateneo, corso] = indirizzo.split('/');
-  if (vista !== 'scheda') {
-    mostraVista('confronto');
-    return;
-  }
-  mostraVista('scheda');
-  if (ateneo && corso && corsoEsiste(ateneo, corso)) {
-    if (statoScheda?.ateneo !== ateneo || statoScheda?.corso !== corso) {
-      window.scrollTo(0, 0);
-      apriScheda(ateneo, corso);
-    }
-  } else if (ateneo || corso) {
-    statoScheda = null;
-    renderScheda();
-    aggiornaRicercaCorsi();
-    elCercaConteggio.textContent =
-      'Il corso indicato nell’indirizzo non esiste fra quelli pubblicati: cercalo qui sotto.';
-    return;
-  } else {
-    renderScheda();
-  }
-  aggiornaRicercaCorsi();
-}
+elBtnExcel.addEventListener('click', scaricaExcel);
 
 // --- Base or Completa, light or dark ---
 
@@ -2259,10 +1955,6 @@ async function avvia() {
     elStatoCaricamento.classList.add('nascosto');
     elAreaApp.classList.remove('nascosto');
 
-    // The address may already ask for a course sheet, as a shared link does.
-    preparaRicercaCorsi();
-    applicaRotta();
-    window.addEventListener('hashchange', applicaRotta);
   } catch (errore) {
     mostraErrore(
       'Non sono riuscito a caricare i dati. Controlla che almalaurea.sqlite sia nella stessa cartella di questa pagina e che tu la stia aprendo da un server locale (non con doppio click).',

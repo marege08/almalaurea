@@ -747,6 +747,12 @@ textarea {
   color: var(--tenue);
 }
 
+/* A note in place of a number ("Campione piccolo", "0 casi") may be wider
+   than the box every value gets: it wraps inside the box instead of spilling
+   over the column on its left. */
+.paragone-valore.paragone-nota { white-space: normal; text-align: right; line-height: 1.2; }
+.paragone-valore.paragone-nota .paragone-numero { min-width: 0; }
+
 /* Small sample: the value is de-emphasized, not hidden. The asterisk is
    CSS-generated, so code that reads the page still sees only the number. */
 .valore-campione-piccolo .paragone-numero { color: var(--tenue); font-weight: 500; }
@@ -1063,15 +1069,32 @@ thead th small {
   color: var(--tenue);
 }
 
-.link-scheda {
-  display: inline-block;
-  margin-top: 0.3rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--verde-testo);
-}
-
 tbody td { border-bottom: 1px solid var(--linea); }
+
+/* Title of the full table, with the Excel download beside it: a quiet
+   round icon button that takes color only on hover. */
+.testa-tabella {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.testa-tabella h2 { margin: 0; }
+.btn-icona {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--tenue);
+  cursor: pointer;
+}
+.btn-icona:hover { color: var(--verde-testo); background: var(--tinta); }
+.btn-icona svg { width: 1.15rem; height: 1.15rem; }
 
 tr.riga-macro-categoria td {
   background: var(--tinta);
@@ -1105,175 +1128,6 @@ td.cella-solo-corso { cursor: help; }
 td.alto { font-weight: 800; }
 
 td.cella-campione-piccolo { color: var(--tenue); }
-
-/* --- Course sheet --- */
-
-.scheda-testa { padding-block: 1.1rem; border-bottom: 1px solid var(--linea); }
-
-.scheda-briciole {
-  margin: 0 0 0.2rem;
-  font-size: 0.82rem;
-  color: var(--tenue);
-}
-
-.scheda-briciole span + span::before { content: ' › '; }
-
-.scheda-titolo {
-  margin: 0;
-  max-width: 30ch;
-  font-size: clamp(1.5rem, 3.2vw, 2.15rem);
-  font-weight: 800;
-  line-height: 1.12;
-  letter-spacing: -0.025em;
-  overflow-wrap: anywhere;
-}
-
-/* Course names are lower case in the source; only the display capitalizes. */
-.scheda-titolo::first-letter { text-transform: uppercase; }
-
-.scheda-azioni {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.scheda-corpo {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 17rem;
-  gap: 2.2rem;
-  align-items: start;
-  padding-block: 1.1rem;
-  border-bottom: 1px solid var(--linea);
-}
-
-.scheda-paragone { min-width: 0; }
-
-.paragone-legenda {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1.1rem;
-  margin: 0 0 0.6rem;
-  padding: 0;
-  font-size: 0.82rem;
-  color: var(--tenue);
-}
-
-.paragone-legenda li { display: inline-flex; align-items: center; gap: 0.4rem; }
-
-.scheda-lato { font-size: 0.87rem; }
-
-.riquadro-campione h3,
-.avviso-prudenza h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-  font-weight: 800;
-}
-
-.riquadro-campione dl { margin: 0 0 0.6rem; }
-
-.campione-voce {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.2rem 0;
-}
-
-.campione-voce dt { color: var(--tenue); }
-.campione-voce dd { margin: 0; font-weight: 600; text-align: right; }
-
-.nota-riquadro {
-  margin: 0 0 1rem;
-  font-size: 0.8rem;
-  line-height: 1.45;
-  color: var(--tenue);
-}
-
-.riga-definizione-scheda {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin-bottom: 0.4rem;
-  font-weight: 600;
-  font-size: 0.82rem;
-}
-
-.avviso-prudenza {
-  margin-top: 0.4rem;
-  padding: 0.7rem 0.85rem;
-  border-left: 4px solid var(--bordo-avviso);
-  border-radius: 0 8px 8px 0;
-  background: var(--tinta);
-}
-
-.avviso-prudenza p { margin: 0; line-height: 1.45; }
-
-.scheda-fonte { margin: 0.9rem 0 0; color: var(--tenue); }
-
-/* --- Course search --- */
-
-.cerca-corso-campi {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 0.75rem;
-}
-
-.cerca-corso-campi label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--tenue);
-}
-
-.cerca-corso-ateneo { align-self: end; }
-
-.cerca-corso-campi input {
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 0.7rem;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 400;
-  color: var(--inchiostro);
-}
-
-.cerca-corso-conteggio {
-  margin: 0.8rem 0 0.4rem;
-  font-size: 0.85rem;
-  color: var(--tenue);
-}
-
-.cerca-corso-risultati {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 26rem;
-  overflow-y: auto;
-  border-top: 1px solid var(--linea);
-}
-
-.cerca-corso-risultati a {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 1rem;
-  min-height: 44px;
-  padding: 0.6rem 0.4rem;
-  border-bottom: 1px solid var(--linea);
-  color: var(--inchiostro);
-  text-decoration: none;
-}
-
-.cerca-corso-risultati a:hover,
-.cerca-corso-risultati a[aria-current="page"] { background: var(--tinta); }
-
-.cerca-corso-risultati a[aria-current="page"] { font-weight: 600; }
-
-.risultato-nome { min-width: 0; overflow-wrap: anywhere; }
-.risultato-ateneo { flex-shrink: 0; font-size: 0.82rem; color: var(--tenue); }
 
 /* --- Footer --- */
 
@@ -1467,10 +1321,6 @@ td.cella-campione-piccolo { color: var(--tenue); }
 
 /* --- Responsive layout --- */
 
-@media (max-width: 900px) {
-  .scheda-corpo { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
-}
-
 @media (max-width: 760px) {
   .contenitore { padding-inline: 1rem; }
 
@@ -1546,9 +1396,6 @@ td.cella-campione-piccolo { color: var(--tenue); }
     box-shadow: 1px 0 0 var(--linea);
   }
   thead th.colonna-domanda { min-width: 9rem; background: var(--bg); }
-
-  .cerca-corso-campi { grid-template-columns: minmax(0, 1fr); }
-  .cerca-corso-risultati a { flex-direction: column; gap: 0.1rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

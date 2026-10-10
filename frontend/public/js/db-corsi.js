@@ -181,8 +181,8 @@ export function interrogaCorso(db, corso, definizione) {
 /**
  * Reads where a course belongs: its discipline group and its degree type.
  *
- * Every row of a course carries both, so one row is enough. The course sheet
- * needs the group to find the aggregate it is compared with.
+ * Every row of a course carries both, so one row is enough. The Base view
+ * needs the group to rank a course among the courses of its group.
  *
  * @param {object} db - Course database of the course's university.
  * @param {string} corso - Course code.

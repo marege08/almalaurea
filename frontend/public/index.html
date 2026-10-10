@@ -31,16 +31,10 @@
       <h1>Confronta i dati dei laureati</h1>
       <p>Dati ufficiali AlmaLaurea 2025</p>
     </div>
-    <!-- The two views are plain links to a hash (#confronto, #scheda/...), so
-         a course sheet has an address that can be shared or bookmarked. -->
     <nav class="navigazione" aria-label="Viste">
       <a id="tab-confronto" class="voce-nav" href="#confronto" aria-current="page">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>
         <span>Confronto</span>
-      </a>
-      <a id="tab-scheda" class="voce-nav" href="#scheda">
-        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>
-        <span class="testo-lungo">Scheda del corso</span><span class="testo-corto">Scheda</span>
       </a>
       <button id="apri-ai" class="voce-nav" type="button" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
@@ -156,7 +150,16 @@
     </div>
 
     <section id="risultato" class="sezione nascosto solo-completa" aria-labelledby="titolo-tabella">
-      <h2 id="titolo-tabella">Tabella completa</h2>
+      <div class="testa-tabella">
+        <h2 id="titolo-tabella">Tabella completa</h2>
+        <!-- Writes the table on screen to a real .xlsx (js/esporta-xlsx.js).
+             Icon only, like the table utilities of Carbon and SAP Fiori: the
+             name lives in aria-label and in the tooltip. -->
+        <button id="btn-excel" class="btn-icona" type="button"
+          aria-label="Scarica in Excel (.xlsx)" title="Scarica in Excel (.xlsx)">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        </button>
+      </div>
       <p class="sotto">Ogni domanda scelta sopra, colonna per colonna.</p>
       <div class="scroll-tabella">
         <table id="tabella-dati">
@@ -174,34 +177,6 @@
       </p>
     </section>
 
-    </div>
-
-    <!-- Course sheet: one course next to its university and its discipline
-         group. Hidden until the address asks for it (#scheda...). -->
-    <div id="vista-scheda" class="nascosto">
-      <div id="scheda-corso" class="scheda-corso nascosto"></div>
-
-      <section class="sezione cerca-corso">
-        <h2 id="titolo-cerca-corso">Cerca un corso</h2>
-        <p class="sotto">
-          La scheda mette un corso di laurea di primo livello accanto al suo
-          ateneo e alla sua area disciplinare, sulle domande che contano di più
-          per scegliere.
-        </p>
-        <div class="cerca-corso-campi">
-          <label>Nome del corso
-            <input id="cerca-corso-testo" type="search" autocomplete="off"
-              placeholder="es. informatica, infermieristica, economia pisa" />
-          </label>
-          <div class="cerca-corso-ateneo">
-            <select id="cerca-corso-ateneo" aria-label="Ateneo">
-              <option value="">Tutti gli atenei</option>
-            </select>
-          </div>
-        </div>
-        <p id="cerca-corso-conteggio" class="cerca-corso-conteggio" aria-live="polite"></p>
-        <ul id="cerca-corso-risultati" class="cerca-corso-risultati"></ul>
-      </section>
     </div>
 
   </div>

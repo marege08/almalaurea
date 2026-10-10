@@ -1,9 +1,9 @@
 // indicatori-chiave.js
 //
-// The handful of indicators shown at a glance: the summary cards of the
-// comparison and the course sheet. Written by hand, unlike config-filtri.js:
-// choosing WHICH questions a student sees first is an editorial decision, not
-// something the dataset can decide.
+// The handful of indicators shown at a glance in the summary of the
+// comparison, and the questions selected when the page opens. Written by
+// hand, unlike config-filtri.js: choosing WHICH questions a student sees
+// first is an editorial decision, not something the dataset can decide.
 //
 // Only the title is editorial. `categoria` and `indicatore` are the exact
 // AlmaLaurea labels, the same keys the comparison table reads, and the page
@@ -27,7 +27,7 @@
  * @property {boolean} [meglioBasso] - Whether a lower value is better, for the 0-10 score (js/voto.js).
  */
 
-/** @type {IndicatoreChiave[]} Shown both in the summary cards and in the course sheet. */
+/** @type {IndicatoreChiave[]} Shown in the summary, scored in the Base view, selected at opening. */
 export const INDICATORI_CRUSCOTTO = [
   {
     id: 'occupati',
@@ -87,7 +87,7 @@ export const INDICATORI_CRUSCOTTO = [
 ];
 
 /**
- * The course sheet adds these to the six above.
+ * Selected at opening with the six above, but not in the summary.
  *
  * The average length of studies is deliberately absent: a course is a
  * three-year degree, while university and group sheets mix it with two-year
@@ -95,7 +95,7 @@ export const INDICATORI_CRUSCOTTO = [
  *
  * @type {IndicatoreChiave[]}
  */
-export const INDICATORI_SOLO_SCHEDA = [
+export const ALTRI_INDICATORI_PRINCIPALI = [
   {
     id: 'soddisfatti',
     momento: 'Durante gli studi',

@@ -26,6 +26,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout as attendi } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { crc32 } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -142,6 +143,35 @@ async function aspettaInPagina(valuta, espressione, descrizione, tentativi = 200
     await attendi(100);
   }
   throw new Error(`Timeout aspettando: ${descrizione}${ultimoErrore ? ` (${ultimoErrore})` : ''}`);
+}
+
+// Legge un .xlsx scritto da js/esporta-xlsx.js: uno zip senza compressione.
+// Controlla il CRC di ogni file con zlib (codice di Node, non quello del
+// sito) e restituisce le celle del primo foglio come { "B2": valore }.
+function leggiXlsx(byte) {
+  const file = {};
+  const dv = new DataView(byte.buffer, byte.byteOffset, byte.byteLength);
+  let p = 0;
+  while (dv.getUint32(p, true) === 0x04034b50) {
+    const metodo = dv.getUint16(p + 8, true);
+    const crc = dv.getUint32(p + 14, true);
+    const dimensione = dv.getUint32(p + 18, true);
+    const lungNome = dv.getUint16(p + 26, true);
+    const lungExtra = dv.getUint16(p + 28, true);
+    const nome = new TextDecoder().decode(byte.subarray(p + 30, p + 30 + lungNome));
+    const dati = byte.subarray(p + 30 + lungNome + lungExtra, p + 30 + lungNome + lungExtra + dimensione);
+    if (metodo !== 0) throw new Error(`${nome}: compresso, atteso senza compressione`);
+    if (crc32(dati) !== crc) throw new Error(`${nome}: CRC sbagliato`);
+    file[nome] = new TextDecoder().decode(dati);
+    p += 30 + lungNome + lungExtra + dimensione;
+  }
+  const foglio = file['xl/worksheets/sheet1.xml'] ?? '';
+  const celle = {};
+  const testo = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  for (const m of foglio.matchAll(/<c r="([A-Z]+\d+)"[^>]*?(?: t="inlineStr")?[^>]*>(?:<v>([^<]*)<\/v>|<is><t[^>]*>([^<]*)<\/t><\/is>)<\/c>/g)) {
+    celle[m[1]] = m[2] !== undefined ? Number(m[2]) : testo(m[3]);
+  }
+  return { file: Object.keys(file), celle, fogli: [...(file['xl/workbook.xml'] ?? '').matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1]) };
 }
 
 async function main() {
@@ -579,8 +609,10 @@ async function main() {
       const di = (indagine) => celle.filter(td => td.title.includes('(indagine ' + indagine + ')'));
       const piccole = (lista) => lista.filter(td => td.classList.contains('cella-campione-piccolo')).length;
       const occ = di('occupazione'), pro = di('profilo');
+      const numeri = (lista) => lista.filter(td => td.classList.contains('cella-valore'));
       return { conValore: celle.filter(td => td.classList.contains('cella-valore')).length,
-               occ: occ.length, occPiccole: piccole(occ),
+               occ: numeri(occ).length, occPiccole: piccole(numeri(occ)),
+               noteSegnate: piccole(occ.filter(td => td.classList.contains('cella-nota'))),
                pro: pro.length, proPiccole: piccole(pro),
                testo: celle.map(td => td.textContent).join('|'),
                legenda: !document.getElementById('legenda-campione').classList.contains('nascosto') };
@@ -588,8 +620,10 @@ async function main() {
     const acsai = await celleAcsai();
     verifica('le celle di ACSAI si riempiono di valori', acsai.conValore > 100,
       `${acsai.conValore} celle con valore`);
-    verifica('occupazione di ACSAI (22 intervistati) tutta segnata come campione piccolo',
-      acsai.occ > 0 && acsai.occPiccole === acsai.occ, `${acsai.occPiccole}/${acsai.occ}`);
+    // Il segno vale per i numeri: una nota al posto del numero non lo porta.
+    verifica('occupazione di ACSAI (22 intervistati): ogni numero segnato come campione piccolo, nessuna nota',
+      acsai.occ > 0 && acsai.occPiccole === acsai.occ && acsai.noteSegnate === 0,
+      `${acsai.occPiccole}/${acsai.occ} numeri, ${acsai.noteSegnate} note segnate`);
     verifica('profilo di ACSAI (52 compilatori) mai segnato',
       acsai.pro > 0 && acsai.proPiccole === 0, `${acsai.proPiccole}/${acsai.pro}`);
     verifica('la legenda del campione piccolo compare', acsai.legenda);
@@ -789,133 +823,42 @@ async function main() {
     verifica('liberando la memoria non si sfratta un ateneo ancora in download',
       sfratto.tenuto, sfratto.inMemoria.join(','));
 
-    // --- 9d. La scheda del corso ---
-    // Si cerca «informatica pisa» come farebbe un utente e si apre il corso
-    // L-31 di Pisa. Valori attesi, definizione ampia: occupati 62,0 (corso),
-    // 62,7 (ateneo di Pisa), 71,9 (area Informatica e Tecnologie ICT).
-    await valuta(`(() => {
-      const s = document.getElementById('sel-definizione');
-      s.value = 'ampia'; s.dispatchEvent(new Event('change'));
-      location.hash = '#scheda';
-      const t = document.getElementById('cerca-corso-testo');
-      t.value = 'informatica pisa'; t.dispatchEvent(new Event('input'));
-      return true;
-    })()`);
-    const risultato = await valuta(`(() => {
-      const a = [...document.querySelectorAll('#cerca-corso-risultati a')]
-        .find(a => a.getAttribute('href') === '#scheda/70024/0500106203100002');
-      if (a) a.click();
-      return { trovato: !!a, vistaScheda: !document.getElementById('vista-scheda').classList.contains('nascosto') };
-    })()`);
-    verifica('la ricerca «informatica pisa» trova informatica (L-31) di Pisa', risultato.trovato);
-    verifica('il link della vista porta alla scheda', risultato.vistaScheda);
-
-    const valoriScheda = async (indicatore) => valuta(`(() => {
-      const riga = document.querySelector('#scheda-corso .paragone-riga[data-indicatore="${indicatore}"]');
-      return riga ? [...riga.querySelectorAll('.paragone-numero')].map(v => v.textContent) : null;
-    })()`);
+    // --- 9d. Corso, ateneo e area nello stesso confronto ---
+    // La pagina si ricarica (colonne di partenza: Marche Politecnica e Bari)
+    // e le tre colonne si scelgono dalle tendine come farebbe un utente:
+    // ACSAI, l'ateneo Sapienza e l'area Informatica e Tecnologie ICT.
+    await valuta(`(() => { setTimeout(() => location.reload(), 0); return true; })()`);
+    await attendi(800);
     await aspettaInPagina(valuta,
-      `document.querySelector('#scheda-corso .scheda-titolo')?.textContent === 'informatica (L-31)' &&
-       document.querySelector('#scheda-corso .paragone-riga[data-indicatore="occupati"]')`,
-      'scheda di informatica (L-31) di Pisa');
-    const occupatiPisa = await valoriScheda('occupati');
-    verifica('scheda Pisa: occupati 62,0% corso, 62,7% ateneo, 71,9% area',
-      JSON.stringify(occupatiPisa) === JSON.stringify(['62,0%', '62,7%', '71,9%']),
-      JSON.stringify(occupatiPisa));
-    const retribuzionePisa = await valoriScheda('retribuzione');
-    verifica('scheda Pisa: retribuzione 1.525 €, 1.447 €, 1.608 €',
-      JSON.stringify(retribuzionePisa) === JSON.stringify(['1.525 €', '1.447 €', '1.608 €']),
-      JSON.stringify(retribuzionePisa));
-    const testaPisa = await valuta(`(() => ({
-      etichette: document.querySelector('.scheda-etichette').textContent,
-      righe: document.querySelectorAll('#scheda-corso .paragone-riga[data-indicatore]').length,
-      stella: document.querySelectorAll('#scheda-corso .valore-campione-piccolo').length,
-    }))()`);
-    verifica('la scheda dice ateneo, tipo di laurea e area',
-      testaPisa.etichette.includes('Pisa') && testaPisa.etichette.includes('Laurea di primo livello') &&
-      testaPisa.etichette.includes('Informatica e Tecnologie ICT'), testaPisa.etichette);
-    verifica('la scheda ha 8 indicatori', testaPisa.righe === 8, `${testaPisa.righe} righe`);
-    verifica('Pisa (108 intervistati, 169 compilatori) non ha valori segnati', testaPisa.stella === 0,
-      `${testaPisa.stella} segnati`);
-
-    // ACSAI dall'indirizzo, come da un link condiviso: occupazione su 22
-    // intervistati, quindi segnata; profilo su 52 compilatori, no.
-    await valuta(`(() => { location.hash = '#scheda/70026/0580106203100003'; return true; })()`);
-    await aspettaInPagina(valuta,
-      `document.querySelector('#scheda-corso .scheda-titolo')?.textContent.startsWith('applied computer science') &&
-       document.querySelector('#scheda-corso .paragone-riga[data-indicatore="occupati"]')`,
-      'scheda di ACSAI');
-    const acsaiScheda = await valuta(`(() => {
-      const corso = (id) => document.querySelector(
-        '#scheda-corso .paragone-riga[data-indicatore="' + id + '"] .paragone-valore[data-entita="corso"]');
-      return { occupati: corso('occupati').classList.contains('valore-campione-piccolo'),
-               inCorso: corso('in-corso').classList.contains('valore-campione-piccolo'),
-               segnoIncerto: !!document.querySelector('#scheda-corso .paragone-riga[data-indicatore="occupati"] .segno-incerto') };
-    })()`);
-    verifica('scheda ACSAI: l\'occupazione (22 intervistati) e\' segnata come campione piccolo',
-      acsaiScheda.occupati && acsaiScheda.segnoIncerto, JSON.stringify(acsaiScheda));
-    verifica('scheda ACSAI: il profilo (52 compilatori) non e\' segnato', !acsaiScheda.inCorso);
-
-    // Il selettore della scheda comanda quello del confronto: le due viste
-    // non possono mostrare definizioni diverse. Con la restrittiva la
-    // retribuzione di ACSAI e' «-» nella fonte (0 casi).
-    await valuta(`(() => {
-      const s = document.getElementById('sel-definizione-scheda');
-      s.value = 'restrittiva'; s.dispatchEvent(new Event('change')); return true;
-    })()`);
-    await attendi(300);
-    const dopoDefinizione = await valuta(`({
-      principale: document.getElementById('sel-definizione').value,
-      scheda: document.getElementById('sel-definizione-scheda').value,
-      retribuzione: document.querySelector('#scheda-corso .paragone-riga[data-indicatore="retribuzione"] .paragone-numero').textContent,
-    })`);
-    verifica('cambiare definizione nella scheda la cambia anche nel confronto',
-      dopoDefinizione.principale === 'restrittiva' && dopoDefinizione.scheda === 'restrittiva',
-      JSON.stringify(dopoDefinizione));
-    verifica('con la restrittiva la retribuzione di ACSAI e\' «0 casi», come nella tabella',
-      dopoDefinizione.retribuzione === '0 casi', dopoDefinizione.retribuzione);
-    await valuta(`(() => {
-      const s = document.getElementById('sel-definizione-scheda');
-      s.value = 'ampia'; s.dispatchEvent(new Event('change')); return true;
-    })()`);
-    await attendi(300);
-
-    // Su un telefono la scheda non allarga la pagina.
-    await invia('Emulation.setDeviceMetricsOverride',
-      { width: 390, height: 900, deviceScaleFactor: 1, mobile: true });
-    await attendi(300);
-    const paginaScheda = await valuta(`[document.documentElement.scrollWidth, innerWidth]`);
-    verifica('su un telefono da 390 px la scheda non allarga la pagina',
-      paginaScheda[0] <= 390, `pagina ${paginaScheda[0]} px, finestra ${paginaScheda[1]}`);
-    await invia('Emulation.clearDeviceMetricsOverride');
-    await attendi(300);
-
-    // «Confronta su tutte le domande»: il confronto diventa corso, ateneo, area.
-    await valuta(`(() => {
-      [...document.querySelectorAll('.scheda-azioni button')]
-        .find(b => b.textContent.includes('tutte le domande')).click();
-      return true;
-    })()`);
+      `document.readyState === 'complete' && document.getElementById('area-app') &&
+       !document.getElementById('area-app').classList.contains('nascosto') &&
+       document.querySelectorAll('.colonna-scheda').length === 2`,
+      'pagina ricaricata');
+    await scegliDaUtente(0, 'campo-entita', 'roma sapienza');
+    await scegliDaUtente(0, 'campo-corso', 'applied computer');
+    await scegliDaUtente(1, 'campo-entita', 'roma sapienza');
+    await valuta(`(() => { document.getElementById('btn-aggiungi-colonna').click(); return true; })()`);
+    await scegliDaUtente(2, 'campo-entita', 'informatica e tec');
     await aspettaInPagina(valuta,
       `document.querySelectorAll('#tabella-head th').length === 4 &&
        !document.getElementById('tabella-head').textContent.includes('caricamento')`,
       'confronto corso, ateneo e area');
     const tuttoConfronto = await valuta(`(() => {
       const th = [...document.querySelectorAll('#tabella-head th')].slice(1).map(t => t.textContent);
-      return { th, vistaConfronto: !document.getElementById('vista-confronto').classList.contains('nascosto'),
-               hash: location.hash,
-               linkScheda: document.querySelector('#tabella-head .link-scheda')?.getAttribute('href'),
+      return { th, linkScheda: !!document.querySelector('.link-scheda'),
+               navScheda: !!document.getElementById('tab-scheda'),
                occupati: [...document.querySelectorAll(
                  '#griglia-sintesi .paragone-riga[data-indicatore="occupati"] .paragone-numero')].map(v => v.textContent),
                avvisi: [...document.querySelectorAll('#avvisi-lista li')].map(li => li.textContent),
                avvisiVisibili: !document.getElementById('avvisi').classList.contains('nascosto') };
     })()`);
-    verifica('«Confronta su tutte le domande» porta al confronto con corso, ateneo e area',
-      tuttoConfronto.vistaConfronto && tuttoConfronto.hash === '#confronto' &&
+    verifica('le tendine portano al confronto con corso, ateneo e area',
       tuttoConfronto.th[0].includes('applied computer science') &&
       tuttoConfronto.th[1].includes('Roma Sapienza') &&
       tuttoConfronto.th[2].includes('Informatica e Tecnologie ICT'),
       JSON.stringify(tuttoConfronto.th).slice(0, 200));
+    verifica('la scheda del corso non c\'e\' piu\': ne\' voce di navigazione ne\' link dalla colonna',
+      !tuttoConfronto.navScheda && !tuttoConfronto.linkScheda, JSON.stringify(tuttoConfronto).slice(0, 80));
     // I voti dello stesso confronto: ACSAI fra i 38 triennali di Informatica
     // (sul lavoro 22 intervistati: pochi dati), Sapienza fra gli atenei,
     // l'area fra le aree.
@@ -932,8 +875,6 @@ async function main() {
       votiMisti.variante === 'per un corso: lavorano o studiano ancora' &&
       votiMisti.paragone.includes('Informatica e Tecnologie ICT') && votiMisti.paragone.includes('38 su quelle di studio'),
       `${votiMisti.variante} | ${votiMisti.paragone}`);
-    verifica('la colonna corso rimanda alla sua scheda',
-      tuttoConfronto.linkScheda === '#scheda/70026/0580106203100003', String(tuttoConfronto.linkScheda));
     verifica('la sintesi segue le nuove colonne: ACSAI 50,0%, Sapienza 63,9%, area 71,9%',
       JSON.stringify(tuttoConfronto.occupati) === JSON.stringify(['50,0%', '63,9%', '71,9%']),
       JSON.stringify(tuttoConfronto.occupati));
@@ -944,6 +885,104 @@ async function main() {
       tuttoConfronto.avvisi[0].startsWith('Colonne di tipo diverso') &&
       tuttoConfronto.avvisi[1].includes('sul lavoro') && tuttoConfronto.avvisi[1].includes('22 intervistati'),
       JSON.stringify(tuttoConfronto.avvisi).slice(0, 200));
+
+    // --- 9e. Una nota al posto del numero resta nella sua casella ---
+    // Il caso visto da Mare l'11 ott 2026: nella sintesi della Completa
+    // «Campione piccolo» sbordava sopra il valore della colonna prima. Qui
+    // matematica (32) di Bari, dove AlmaLaurea nasconde «in corso» (1 caso).
+    await scegliDaUtente(1, 'campo-entita', 'bari');
+    await scegliDaUtente(1, 'campo-corso', 'matematica (32)');
+    await aspettaInPagina(valuta,
+      `document.querySelectorAll('#tabella-head th')[2]?.textContent.includes('matematica') &&
+       !document.getElementById('tabella-head').textContent.includes('caricamento')`,
+      'colonna matematica (32) di Bari');
+    await valuta(`(() => { document.getElementById('modo').click(); return true; })()`);
+    const nota = await valuta(`(() => {
+      const riga = document.querySelector('#griglia-sintesi .paragone-riga[data-indicatore="in-corso"]');
+      const valori = [...riga.querySelectorAll('.paragone-valore')];
+      const box = valori.map(v => v.getBoundingClientRect());
+      // L'ingombro delle lettere, non della loro casella: una casella stretta
+      // con min-width: 0 resta dentro anche quando il testo ne esce.
+      const numeri = valori.map(v => {
+        const r = document.createRange();
+        r.selectNodeContents(v.querySelector('.paragone-numero'));
+        return r.getBoundingClientRect();
+      });
+      const notaEl = valori[1];
+      return {
+        testo: notaEl.querySelector('.paragone-numero').textContent,
+        dentro: numeri.every((n, i) => n.left >= box[i].left - 0.5 && n.right <= box[i].right + 0.5),
+        staccati: numeri.every((n, i) => i === 0 || numeri[i - 1].right <= n.left + 0.5),
+        asterisco: getComputedStyle(notaEl.querySelector('.paragone-numero'), '::after').content,
+        segnata: notaEl.classList.contains('valore-campione-piccolo'),
+      };
+    })()`);
+    verifica('la nota «Campione piccolo» sta dentro la sua casella e non tocca la colonna accanto',
+      nota.testo === 'Campione piccolo' && nota.dentro && nota.staccati, JSON.stringify(nota));
+    verifica('la nota non porta l\'asterisco del campione piccolo, che vale per i numeri',
+      !nota.segnata && (nota.asterisco === 'none' || nota.asterisco === 'normal'), JSON.stringify(nota));
+
+    // --- 9f. «Scarica in Excel»: il file e' la tabella sullo schermo ---
+    // Si apre la tabella, si intercetta il file al posto del download e lo si
+    // rilegge qui con un lettore indipendente; ogni valore deve coincidere
+    // con la cella della tabella.
+    const excel = await valuta(`(async () => {
+      if (document.getElementById('risultato').classList.contains('nascosto')) {
+        document.getElementById('btn-confronta').click();
+      }
+      const vero = URL.createObjectURL;
+      let blob = null, nome = null;
+      URL.createObjectURL = (b) => { blob = b; return vero.call(URL, b); };
+      const clickVero = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () { nome = this.download; };
+      const bottone = document.getElementById('btn-excel');
+      const visibile = bottone.offsetParent !== null && bottone.getAttribute('aria-label') === 'Scarica in Excel (.xlsx)';
+      bottone.click();
+      URL.createObjectURL = vero;
+      HTMLAnchorElement.prototype.click = clickVero;
+      const byte = new Uint8Array(await blob.arrayBuffer());
+      let bin = '';
+      for (const b of byte) bin += String.fromCharCode(b);
+      const righe = [...document.querySelectorAll('#tabella-body tr')]
+        .filter(tr => !tr.classList.contains('riga-macro-categoria'))
+        .map(tr => [...tr.cells].map(td => td.textContent.trim()))
+        .filter(c => c.slice(1).some(x => x !== ''));
+      const th = [...document.querySelectorAll('#tabella-head th')].slice(1).map(t => t.textContent);
+      return { visibile, nome, tipo: blob.type, base64: btoa(bin), righe, th };
+    })()`);
+    const xlsx = leggiXlsx(Uint8Array.from(Buffer.from(excel.base64, 'base64')));
+    verifica('il pulsante «Scarica in Excel» c\'e\' nella Completa e scarica un .xlsx',
+      excel.visibile && /^confronto-almalaurea-\d{4}-\d{2}-\d{2}\.xlsx$/.test(excel.nome) &&
+      excel.tipo === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      `${excel.visibile} ${excel.nome} ${excel.tipo}`);
+    verifica('il file ha i due fogli, Confronto e Note, e i CRC giusti',
+      JSON.stringify(xlsx.fogli) === JSON.stringify(['Confronto', 'Note']) && xlsx.file.length === 7,
+      JSON.stringify(xlsx));
+    const lettere = ['D', 'E', 'F'];
+    // L'intestazione della tabella comincia col nome della colonna; nel file
+    // il corso porta in piu' il suo ateneo fra parentesi.
+    const intestazioniOk = excel.th.every((t, i) => {
+      const nome = String(xlsx.celle[`${lettere[i]}1`] ?? '');
+      return nome !== '' && t.toLowerCase().startsWith(nome.split(' (')[0].toLowerCase());
+    });
+    let uguali = 0;
+    const diversi = [];
+    excel.righe.forEach((celle, r) => {
+      celle.slice(1).forEach((testo, c) => {
+        const inFile = xlsx.celle[`${lettere[c]}${r + 2}`];
+        const numero = /^-?[\d.]+(,\d+)?$/.test(testo) ? Number(testo.replace(/\./g, '').replace(',', '.')) : null;
+        // La tabella mostra un decimale; il file il valore pieno pubblicato
+        // (0,17 nel file, «0,2» a schermo): si confronta a mezzo decimale.
+        const ok = numero !== null
+          ? typeof inFile === 'number' && Math.abs(inFile - numero) <= 0.05 + 1e-9
+          : inFile === testo;
+        if (ok) uguali++; else diversi.push(`${lettere[c]}${r + 2}: tabella «${testo}», file «${inFile}»`);
+      });
+    });
+    verifica(`ogni cella del file coincide con la tabella (${uguali} celle, ${excel.righe.length} righe)`,
+      intestazioniOk && diversi.length === 0 && uguali > 100 && xlsx.celle[`A${excel.righe.length + 2}`] === undefined,
+      diversi.slice(0, 3).join(' | ') || `intestazioni ${intestazioniOk}`);
+    await valuta(`(() => { document.getElementById('modo').click(); return true; })()`);
 
     // Il pop-up dell'AI si apre dal pulsante in testata e si chiude.
     const dialogo = await valuta(`(() => {
@@ -963,15 +1002,15 @@ async function main() {
     })()`);
     verifica('«Solo le principali» torna alle 8 domande', principali === '8 domande scelte', principali);
 
-    // Un corso che non esiste nell'indirizzo non apre niente e lo dice.
-    await valuta(`(() => { location.hash = '#scheda/70024/__proto__'; return true; })()`);
+    // Un vecchio link alla scheda del corso apre il confronto, non una pagina vuota.
+    await valuta(`(() => { location.hash = '#scheda/70026/0580106203100003'; return true; })()`);
     await attendi(300);
-    const corsoFalso = await valuta(`({
-      scheda: !document.getElementById('scheda-corso').classList.contains('nascosto'),
-      messaggio: document.getElementById('cerca-corso-conteggio').textContent,
+    const vecchioLink = await valuta(`({
+      confronto: document.getElementById('vista-confronto').offsetParent !== null,
+      vistaScheda: !!document.getElementById('vista-scheda'),
     })`);
-    verifica('un corso inesistente nell\'indirizzo non apre una scheda e lo dice',
-      !corsoFalso.scheda && corsoFalso.messaggio.includes('non esiste'), JSON.stringify(corsoFalso));
+    verifica('un vecchio link #scheda/... mostra il confronto',
+      vecchioLink.confronto && !vecchioLink.vistaScheda, JSON.stringify(vecchioLink));
     await valuta(`(() => { location.hash = '#confronto'; return true; })()`);
 
     // --- 10. Console pulita ---
