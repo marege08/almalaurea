@@ -66,7 +66,7 @@ SEZIONE_A_MACRO = {
     "4. RIUSCITA NEGLI STUDI UNIVERSITARI": "Successo e Percorso",
     "5. CONDIZIONI DI STUDIO": "Competenze e Ambiente",
     "6. LAVORO DURANTE GLI STUDI UNIVERSITARI": "Lavoro e Futuro",
-    "7. GIUDIZI SULL´ESPERIENZA UNIVERSITARIA": "Lavoro e Futuro",
+    "7. GIUDIZI SULL´ESPERIENZA UNIVERSITARIA": "Esperienza Universitaria",
     "8. CONOSCENZE LINGUISTICHE E INFORMATICHE": "Competenze e Ambiente",
     "9. PROSPETTIVE DI STUDIO": "Successo e Percorso",
     "10. PROSPETTIVE DI LAVORO": "Lavoro e Futuro",
@@ -87,6 +87,7 @@ SEZIONE_A_MACRO = {
 # alphabetical; it is a reading choice.
 ORDINE_MACRO = [
     "Successo e Percorso",
+    "Esperienza Universitaria",
     "Lavoro e Futuro",
     "Dopo la Laurea",
     "Competenze e Ambiente",

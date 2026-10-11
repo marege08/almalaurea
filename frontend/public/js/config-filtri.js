@@ -417,228 +417,7 @@ export const CONFIG_FILTRI = {
       "soloCorso": true
     }
   ],
-  "Lavoro e Futuro": [
-    {
-      "id": "aspetti_ritenuti_rilevanti_nella_ricerca_del_lavoro_decisamente_si",
-      "label": "Aspetti ritenuti rilevanti nella ricerca del lavoro: decisamente sì (%)",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "10. PROSPETTIVE DI LAVORO",
-      "categoria": "Aspetti ritenuti rilevanti nella ricerca del lavoro: decisamente sì (%)",
-      "indicatori": [
-        "Acquisizione di professionalità",
-        "Coerenza con gli studi",
-        "Coinvolgimento e partecipazione all’attività lavorativa e ai processi decisionali",
-        "Flessibilità dell’orario di lavoro",
-        "Indipendenza o autonomia",
-        "Luogo di lavoro (ubicazione, caratteristiche fisiche dell’ambiente di lavoro)",
-        "Opportunità di contatti con l'estero",
-        "Possibilità di carriera",
-        "Possibilità di guadagno",
-        "Possibilità di utilizzare al meglio le competenze acquisite",
-        "Prestigio ricevuto dal lavoro",
-        "Rapporti con i colleghi sul luogo di lavoro",
-        "Rispondenza agli interessi culturali",
-        "Stabilità/sicurezza del posto di lavoro",
-        "Tempo libero",
-        "Utilità sociale del lavoro"
-      ]
-    },
-    {
-      "id": "contratto",
-      "label": "CONTRATTO",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "10. PROSPETTIVE DI LAVORO",
-      "categoria": "CONTRATTO",
-      "indicatori": [
-        "A tempo determinato",
-        "Apprendistato",
-        "Autonomo/in conto proprio",
-        "Somministrazione di lavoro (ex interinale)",
-        "Stage",
-        "Tempo indeterminato"
-      ]
-    },
-    {
-      "id": "disponibilita_a_lavorare_nelle_seguenti_aree_geografiche_decisamente_si",
-      "label": "Disponibilità a lavorare nelle seguenti aree geografiche: decisamente sì (%)",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "10. PROSPETTIVE DI LAVORO",
-      "categoria": "Disponibilità a lavorare nelle seguenti aree geografiche: decisamente sì (%)",
-      "indicatori": [
-        "Italia centrale",
-        "Italia meridionale",
-        "Italia settentrionale",
-        "Provincia degli studi",
-        "Provincia di residenza",
-        "Regione degli studi",
-        "Stato europeo",
-        "Stato extraeuropeo"
-      ]
-    },
-    {
-      "id": "disponibilita_ad_accettare_lavori_non_attinenti_al_proprio_titolo_di_studio",
-      "label": "Disponibilità ad accettare lavori non attinenti al proprio titolo di studio (%)",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "10. PROSPETTIVE DI LAVORO",
-      "categoria": "Disponibilità ad accettare lavori non attinenti al proprio titolo di studio (%)",
-      "indicatori": [
-        "No",
-        "Sì, come soluzione transitoria",
-        "Sì, comunque"
-      ]
-    },
-    {
-      "id": "disponibilita_ad_effettuare_trasferte_di_lavoro",
-      "label": "Disponibilità ad effettuare trasferte di lavoro (%)",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "10. PROSPETTIVE DI LAVORO",
-      "categoria": "Disponibilità ad effettuare trasferte di lavoro (%)",
-      "indicatori": [
-        "Non disponibili a trasferte",
-        "Sì, anche con trasferimenti di residenza",
-        "Sì, anche frequenti (senza cambi di residenza)",
-        "Sì, ma solo in numero limitato"
-      ]
-    },
-    {
-      "id": "orario_modalita_lavorativa",
-      "label": "ORARIO/MODALITA' LAVORATIVA",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "10. PROSPETTIVE DI LAVORO",
-      "categoria": "ORARIO/MODALITA' LAVORATIVA",
-      "indicatori": [
-        "Part-time",
-        "Telelavoro o smart-working",
-        "Tempo pieno"
-      ]
-    },
-    {
-      "id": "sono_interessati_a_lavorare_nei_seguenti_settori_decisamente_si",
-      "label": "Sono interessati a lavorare nei seguenti settori: decisamente sì (%)",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "10. PROSPETTIVE DI LAVORO",
-      "categoria": "Sono interessati a lavorare nei seguenti settori: decisamente sì (%)",
-      "indicatori": [
-        "Privato (compreso l'avvio di un'attività autonoma/in conto proprio)",
-        "Pubblico"
-      ]
-    },
-    {
-      "id": "altre_esperienze_di_lavoro_con_continuita_a_tempo_pieno",
-      "label": "Altre esperienze di lavoro con continuità a tempo pieno",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
-      "categoria": "",
-      "indicatori": [
-        "Altre esperienze di lavoro con continuità a tempo pieno"
-      ]
-    },
-    {
-      "id": "hanno_avuto_esperienze_di_lavoro",
-      "label": "Hanno avuto esperienze di lavoro (%)",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
-      "categoria": "",
-      "indicatori": [
-        "Hanno avuto esperienze di lavoro (%)"
-      ]
-    },
-    {
-      "id": "lavoratori_studenti",
-      "label": "Lavoratori-studenti",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
-      "categoria": "",
-      "indicatori": [
-        "Lavoratori-studenti"
-      ]
-    },
-    {
-      "id": "lavoro_a_tempo_parziale",
-      "label": "Lavoro a tempo parziale",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
-      "categoria": "",
-      "indicatori": [
-        "Lavoro a tempo parziale"
-      ]
-    },
-    {
-      "id": "lavoro_occasionale_saltuario_stagionale",
-      "label": "Lavoro occasionale, saltuario, stagionale",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
-      "categoria": "",
-      "indicatori": [
-        "Lavoro occasionale, saltuario, stagionale"
-      ]
-    },
-    {
-      "id": "nessuna_esperienza_di_lavoro",
-      "label": "Nessuna esperienza di lavoro",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
-      "categoria": "",
-      "indicatori": [
-        "Nessuna esperienza di lavoro"
-      ]
-    },
-    {
-      "id": "hanno_ritenuto_difficile_conciliare_studio_e_lavoro_per_100_che_hanno_avuto_espe",
-      "label": "Hanno ritenuto difficile conciliare studio e lavoro(per 100 che hanno avuto esperienze di lavoro con continuità a tempo pieno o parziale)",
-      "indagine": "profilo",
-      "definizioni": [
-        ""
-      ],
-      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
-      "categoria": "Hanno ritenuto difficile conciliare studio e lavoro(per 100 che hanno avuto esperienze di lavoro con continuità a tempo pieno o parziale)",
-      "indicatori": [
-        "Decisamente no",
-        "Decisamente sì",
-        "Lavoro coerente con gli studi(per 100 che hanno avuto esperienze di lavoro)",
-        "Più no che sì",
-        "Più sì che no"
-      ]
-    },
+  "Esperienza Universitaria": [
     {
       "id": "hanno_ritenuto_adeguata_la_supervisione_della_prova_finale_per_100_per_cui_era_p",
       "label": "Hanno ritenuto adeguata la supervisione della prova finale(per 100 per cui era prevista la supervisione della prova finale)",
@@ -1104,6 +883,229 @@ export const CONFIG_FILTRI = {
         "Hanno utilizzato i servizi di biblioteca (prestito/consultazione, orari di apertura, ...) (%)",
         "In numero adeguato",
         "In numero inadeguato"
+      ]
+    }
+  ],
+  "Lavoro e Futuro": [
+    {
+      "id": "aspetti_ritenuti_rilevanti_nella_ricerca_del_lavoro_decisamente_si",
+      "label": "Aspetti ritenuti rilevanti nella ricerca del lavoro: decisamente sì (%)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "10. PROSPETTIVE DI LAVORO",
+      "categoria": "Aspetti ritenuti rilevanti nella ricerca del lavoro: decisamente sì (%)",
+      "indicatori": [
+        "Acquisizione di professionalità",
+        "Coerenza con gli studi",
+        "Coinvolgimento e partecipazione all’attività lavorativa e ai processi decisionali",
+        "Flessibilità dell’orario di lavoro",
+        "Indipendenza o autonomia",
+        "Luogo di lavoro (ubicazione, caratteristiche fisiche dell’ambiente di lavoro)",
+        "Opportunità di contatti con l'estero",
+        "Possibilità di carriera",
+        "Possibilità di guadagno",
+        "Possibilità di utilizzare al meglio le competenze acquisite",
+        "Prestigio ricevuto dal lavoro",
+        "Rapporti con i colleghi sul luogo di lavoro",
+        "Rispondenza agli interessi culturali",
+        "Stabilità/sicurezza del posto di lavoro",
+        "Tempo libero",
+        "Utilità sociale del lavoro"
+      ]
+    },
+    {
+      "id": "contratto",
+      "label": "CONTRATTO",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "10. PROSPETTIVE DI LAVORO",
+      "categoria": "CONTRATTO",
+      "indicatori": [
+        "A tempo determinato",
+        "Apprendistato",
+        "Autonomo/in conto proprio",
+        "Somministrazione di lavoro (ex interinale)",
+        "Stage",
+        "Tempo indeterminato"
+      ]
+    },
+    {
+      "id": "disponibilita_a_lavorare_nelle_seguenti_aree_geografiche_decisamente_si",
+      "label": "Disponibilità a lavorare nelle seguenti aree geografiche: decisamente sì (%)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "10. PROSPETTIVE DI LAVORO",
+      "categoria": "Disponibilità a lavorare nelle seguenti aree geografiche: decisamente sì (%)",
+      "indicatori": [
+        "Italia centrale",
+        "Italia meridionale",
+        "Italia settentrionale",
+        "Provincia degli studi",
+        "Provincia di residenza",
+        "Regione degli studi",
+        "Stato europeo",
+        "Stato extraeuropeo"
+      ]
+    },
+    {
+      "id": "disponibilita_ad_accettare_lavori_non_attinenti_al_proprio_titolo_di_studio",
+      "label": "Disponibilità ad accettare lavori non attinenti al proprio titolo di studio (%)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "10. PROSPETTIVE DI LAVORO",
+      "categoria": "Disponibilità ad accettare lavori non attinenti al proprio titolo di studio (%)",
+      "indicatori": [
+        "No",
+        "Sì, come soluzione transitoria",
+        "Sì, comunque"
+      ]
+    },
+    {
+      "id": "disponibilita_ad_effettuare_trasferte_di_lavoro",
+      "label": "Disponibilità ad effettuare trasferte di lavoro (%)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "10. PROSPETTIVE DI LAVORO",
+      "categoria": "Disponibilità ad effettuare trasferte di lavoro (%)",
+      "indicatori": [
+        "Non disponibili a trasferte",
+        "Sì, anche con trasferimenti di residenza",
+        "Sì, anche frequenti (senza cambi di residenza)",
+        "Sì, ma solo in numero limitato"
+      ]
+    },
+    {
+      "id": "orario_modalita_lavorativa",
+      "label": "ORARIO/MODALITA' LAVORATIVA",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "10. PROSPETTIVE DI LAVORO",
+      "categoria": "ORARIO/MODALITA' LAVORATIVA",
+      "indicatori": [
+        "Part-time",
+        "Telelavoro o smart-working",
+        "Tempo pieno"
+      ]
+    },
+    {
+      "id": "sono_interessati_a_lavorare_nei_seguenti_settori_decisamente_si",
+      "label": "Sono interessati a lavorare nei seguenti settori: decisamente sì (%)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "10. PROSPETTIVE DI LAVORO",
+      "categoria": "Sono interessati a lavorare nei seguenti settori: decisamente sì (%)",
+      "indicatori": [
+        "Privato (compreso l'avvio di un'attività autonoma/in conto proprio)",
+        "Pubblico"
+      ]
+    },
+    {
+      "id": "altre_esperienze_di_lavoro_con_continuita_a_tempo_pieno",
+      "label": "Altre esperienze di lavoro con continuità a tempo pieno",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
+      "categoria": "",
+      "indicatori": [
+        "Altre esperienze di lavoro con continuità a tempo pieno"
+      ]
+    },
+    {
+      "id": "hanno_avuto_esperienze_di_lavoro",
+      "label": "Hanno avuto esperienze di lavoro (%)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
+      "categoria": "",
+      "indicatori": [
+        "Hanno avuto esperienze di lavoro (%)"
+      ]
+    },
+    {
+      "id": "lavoratori_studenti",
+      "label": "Lavoratori-studenti",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
+      "categoria": "",
+      "indicatori": [
+        "Lavoratori-studenti"
+      ]
+    },
+    {
+      "id": "lavoro_a_tempo_parziale",
+      "label": "Lavoro a tempo parziale",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
+      "categoria": "",
+      "indicatori": [
+        "Lavoro a tempo parziale"
+      ]
+    },
+    {
+      "id": "lavoro_occasionale_saltuario_stagionale",
+      "label": "Lavoro occasionale, saltuario, stagionale",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
+      "categoria": "",
+      "indicatori": [
+        "Lavoro occasionale, saltuario, stagionale"
+      ]
+    },
+    {
+      "id": "nessuna_esperienza_di_lavoro",
+      "label": "Nessuna esperienza di lavoro",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
+      "categoria": "",
+      "indicatori": [
+        "Nessuna esperienza di lavoro"
+      ]
+    },
+    {
+      "id": "hanno_ritenuto_difficile_conciliare_studio_e_lavoro_per_100_che_hanno_avuto_espe",
+      "label": "Hanno ritenuto difficile conciliare studio e lavoro(per 100 che hanno avuto esperienze di lavoro con continuità a tempo pieno o parziale)",
+      "indagine": "profilo",
+      "definizioni": [
+        ""
+      ],
+      "sezione": "6. LAVORO DURANTE GLI STUDI UNIVERSITARI",
+      "categoria": "Hanno ritenuto difficile conciliare studio e lavoro(per 100 che hanno avuto esperienze di lavoro con continuità a tempo pieno o parziale)",
+      "indicatori": [
+        "Decisamente no",
+        "Decisamente sì",
+        "Lavoro coerente con gli studi(per 100 che hanno avuto esperienze di lavoro)",
+        "Più no che sì",
+        "Più sì che no"
       ]
     }
   ],

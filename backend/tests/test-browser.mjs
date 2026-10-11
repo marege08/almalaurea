@@ -402,6 +402,10 @@ async function main() {
          .map(d => d.querySelector('summary span').textContent)`);
     verifica('«Dopo la Laurea» compare fra i filtri',
       macro.includes('Dopo la Laurea'), macro.join(' | '));
+    // I giudizi sull'universita' (sezione 7 del profilo) hanno un gruppo loro,
+    // subito dopo «Successo e Percorso», e non stanno piu' sotto il lavoro.
+    verifica('«Esperienza Universitaria» e\' il secondo gruppo dei filtri',
+      macro[1] === 'Esperienza Universitaria', macro.join(' | '));
 
     // --- 3. Il selettore di definizione c'e' ed e' popolato ---
     const sel = await valuta(`(() => {
