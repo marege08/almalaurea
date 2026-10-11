@@ -353,6 +353,28 @@ async function main() {
     const alti = await valuta(`document.querySelectorAll('#tabella-body td.alto').length`);
     verifica('il valore piu\' alto di ogni riga e\' segnato', alti > 50, `${alti} celle in grassetto`);
 
+    // --- 1a. Il fumetto dei suggerimenti (js/suggerimento.js) ---
+    // Passando sopra una cella il title passa nel fumetto (e il browser tace);
+    // uscendo il fumetto sparisce e il title torna dov'era, intatto.
+    const fumetto = await valuta(`(async () => {
+      const td = document.querySelector('#tabella-body td.cella-valore[title]');
+      const titolo = td.title;
+      const evento = (tipo) => new PointerEvent(tipo, { pointerType: 'mouse', bubbles: true });
+      td.dispatchEvent(evento('pointerover'));
+      await new Promise(r => setTimeout(r, 400));
+      const bolla = document.getElementById('suggerimento');
+      const durante = { visibile: !bolla.hidden,
+        testo: [...bolla.children].map(c => c.textContent).join('\\n'),
+        titolo: td.getAttribute('title'), cursore: getComputedStyle(td).cursor };
+      td.dispatchEvent(evento('pointerout'));
+      return { titolo, durante, dopo: { visibile: !bolla.hidden, titolo: td.getAttribute('title') } };
+    })()`);
+    verifica('passando sopra una cella compare il fumetto col suo testo, senza tooltip del browser ne\' cursore a punto interrogativo',
+      fumetto.durante.visibile && fumetto.durante.testo === fumetto.titolo && fumetto.titolo !== '' &&
+      fumetto.durante.titolo === null && fumetto.durante.cursore !== 'help', JSON.stringify(fumetto.durante));
+    verifica('uscendo il fumetto sparisce e il title torna al suo posto',
+      !fumetto.dopo.visibile && fumetto.dopo.titolo === fumetto.titolo, JSON.stringify(fumetto.dopo));
+
     // --- 1b. La sintesi «In sintesi» legge gli stessi dati della tabella ---
     // All'avvio le colonne sono Marche Politecnica (70001) e Bari (70002).
     // «Tasso di occupazione › Totale» vale 64,6 e 59,7; la retribuzione di

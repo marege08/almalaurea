@@ -34,6 +34,7 @@ import { calcolaVoto, fraseVoto, SOGLIA_RISPONDENTI } from './voto.js';
 import { TERMINI_PARAGONE } from './termini-paragone.js';
 import { creaTendina, potenziaSelect } from './tendina.js';
 import { creaXlsx } from './esporta-xlsx.js';
+import { attivaSuggerimenti } from './suggerimento.js';
 
 const ORDINE_MACRO = Object.keys(CONFIG_FILTRI);
 
@@ -1935,6 +1936,7 @@ mostraTema();
 
 /** Loads the dataset and initializes the comparison UI. */
 async function avvia() {
+  attivaSuggerimenti();
   try {
     db = await caricaDatabase();
     leggiCodici(db);

@@ -711,7 +711,6 @@ textarea {
   position: absolute;
   top: 50%;
   margin: -0.425rem 0 0 -0.425rem;
-  cursor: help;
 }
 
 .traccia-estremi {
@@ -735,7 +734,6 @@ textarea {
   gap: 0.35rem;
   width: var(--larghezza-valore);
   white-space: nowrap;
-  cursor: help;
 }
 
 .paragone-numero { font-weight: 600; }
@@ -857,7 +855,6 @@ dd.valore-campione-piccolo::after {
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.03em;
-  cursor: help;
 }
 
 .voto-cifra small {
@@ -1119,11 +1116,6 @@ td.cella-solo-corso {
   font-style: italic;
 }
 
-/* Every cell with a value carries its sample size in the title attribute;
-   the help cursor is the only visual cue and takes no space. */
-td.cella-valore,
-td.cella-nota,
-td.cella-solo-corso { cursor: help; }
 
 td.alto { font-weight: 800; }
 
@@ -1140,6 +1132,52 @@ td.cella-campione-piccolo { color: var(--tenue); }
 }
 
 .piede p { margin: 0 auto 0.4rem; max-width: 90ch; }
+
+/* --- Tooltip (js/suggerimento.js) ---
+   Drawn like the header bar: a light card with a soft shadow, and a small
+   arrow toward the value. --freccia is the arrow's distance from the left
+   edge; data-lato says whether the bubble sits above or below. */
+
+.suggerimento {
+  position: absolute;
+  z-index: 30;
+  max-width: min(20rem, calc(100vw - 1rem));
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--linea);
+  border-radius: 12px;
+  background: var(--superficie);
+  color: var(--inchiostro);
+  box-shadow: 0 1px 2px var(--ombra), 0 8px 24px var(--ombra);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.suggerimento[data-lato="sotto"] { transform: translateY(-3px); }
+.suggerimento.visibile { opacity: 1; transform: none; }
+
+.suggerimento > * { display: block; }
+.suggerimento > strong { font-weight: 600; margin-bottom: 0.15rem; }
+.suggerimento > span { color: var(--tenue); }
+.suggerimento > span:only-child { color: var(--inchiostro); }
+
+.suggerimento::after {
+  content: '';
+  position: absolute;
+  left: var(--freccia, 50%);
+  width: 9px;
+  height: 9px;
+  margin-left: -5px;
+  background: var(--superficie);
+  border: 1px solid var(--linea);
+  transform: rotate(45deg);
+}
+
+.suggerimento[data-lato="sopra"]::after { bottom: -5.5px; border-top: 0; border-left: 0; }
+.suggerimento[data-lato="sotto"]::after { top: -5.5px; border-bottom: 0; border-right: 0; }
 
 /* --- AI dialog --- */
 
