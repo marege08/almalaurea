@@ -67,8 +67,6 @@
     <div id="vista-confronto">
 
     <section class="sezione">
-      <h2>Cosa vuoi confrontare?</h2>
-      <p class="sotto">Scegli un ateneo e, se vuoi, un suo corso; oppure un'area disciplinare in tutta Italia.</p>
       <div class="colonne-riga">
         <div id="colonne-schede" class="colonne-schede"></div>
         <button id="btn-aggiungi-colonna" type="button" class="aggiungi">+ Aggiungi colonna</button>
@@ -85,11 +83,7 @@
     <!-- Base view: a 0-10 score per key question (js/voto.js). app.js fills
          the rows on every redraw, from the same data as the table. -->
     <section class="sezione solo-base" aria-labelledby="titolo-voti">
-      <h2 id="titolo-voti">Come se la cavano</h2>
-      <p class="sotto">
-        Un voto da 0 a 10 per ogni domanda: dice quanti termini di paragone
-        simili battono. I valori pubblicati stanno nella versione Completa.
-      </p>
+      <h2 id="titolo-voti">Numeri</h2>
       <div id="griglia-voti" class="voti"></div>
       <p id="paragone-voti" class="nota"></p>
       <details class="come-voto">
@@ -116,19 +110,13 @@
     <!-- Key questions for the columns above, on fixed scales. app.js fills
          the rows from js/indicatori-chiave.js on every redraw of the table. -->
     <section class="sezione solo-completa" aria-labelledby="titolo-sintesi">
-      <h2 id="titolo-sintesi">In sintesi</h2>
-      <p class="sotto">
-        Sei domande per farsi un'idea, ognuna sulla sua scala fissa: le
-        percentuali vanno sempre da 0 a 100, così una differenza di un punto
-        resta piccola anche a occhio. Sotto ogni titolo c'è la domanda
-        AlmaLaurea esatta.
-      </p>
+      <h2 id="titolo-sintesi">Numeri</h2>
       <div id="griglia-sintesi" class="righe"></div>
       <p id="nota-sintesi" class="nota"></p>
     </section>
 
     <section class="sezione filtri solo-completa">
-      <h2>Quali domande vuoi nella tabella?</h2>
+      <h2>Campi</h2>
       <p class="sotto">Le principali sono già scelte. Apri un gruppo per aggiungerne altre.</p>
       <div class="opzioni">
         <!-- Selector for the definition of "occupato". It remains hidden until

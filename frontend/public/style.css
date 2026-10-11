@@ -242,7 +242,7 @@ a { color: var(--verde-testo); }
 
 /* --- Page structure --- */
 
-main { padding-block: 1.2rem 2.5rem; }
+main { padding-block: 2.75rem 2.5rem; }
 
 .sezione {
   padding-block: 1.1rem;
@@ -1132,12 +1132,14 @@ td.cella-campione-piccolo { color: var(--tenue); }
 /* --- Footer --- */
 
 .piede {
+  margin-top: 3rem;
   padding-bottom: 1.6rem;
   color: var(--tenue);
   font-size: 0.8rem;
+  text-align: center;
 }
 
-.piede p { margin: 0 0 0.4rem; max-width: 90ch; }
+.piede p { margin: 0 auto 0.4rem; max-width: 90ch; }
 
 /* --- AI dialog --- */
 
@@ -1323,6 +1325,7 @@ td.cella-campione-piccolo { color: var(--tenue); }
 
 @media (max-width: 760px) {
   .contenitore { padding-inline: 1rem; }
+  main { padding-top: 1.2rem; }
 
   /* The bar keeps the title, the switch and the theme; the navigation
      becomes a pill fixed at the bottom of the screen. */
