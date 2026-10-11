@@ -3,8 +3,9 @@
  *
  * Converts one database row (`valore` and `nota`) into table-cell text.
  *
- * Numeric values are displayed with the Italian decimal comma without
- * repeating the unit, which already appears in the column or category header.
+ * Numeric values are displayed in Italian style (decimal comma, thousands
+ * dot) without repeating the unit, which already appears in the column or
+ * category header.
  * Null values display only the translated note; raw `*`, `-`, and `/` symbols
  * are never exposed, and zero is never invented.
  *
@@ -27,6 +28,7 @@ const TRADUZIONE_NOTE = {
  * @example
  * processData({ valore: 38.5, nota: null })                  -> "38,5"
  * processData({ valore: 0, nota: null })                     -> "0,0"
+ * processData({ valore: 1291, nota: null })                  -> "1.291,0"
  * processData({ valore: null, nota: "oscurato_meno_di_5" })  -> "Campione piccolo"
  * processData({ valore: null, nota: "zero_casi" })           -> "0 casi"
  * processData({ valore: null, nota: "non_disponibile" })     -> "Dato non disponibile"
@@ -36,7 +38,11 @@ function processData({ valore, nota }) {
   // Zero is a legitimate value, such as 0% of graduates who worked abroad.
   // An explicit null/undefined check prevents zero from being treated as absent.
   if (valore !== null && valore !== undefined) {
-    return valore.toFixed(1).replace(".", ",");
+    return valore.toLocaleString("it-IT", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+      useGrouping: "always",
+    });
   }
 
   if (nota && TRADUZIONE_NOTE[nota]) {
